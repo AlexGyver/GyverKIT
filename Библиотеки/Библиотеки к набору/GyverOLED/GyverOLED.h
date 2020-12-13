@@ -818,6 +818,16 @@ public:
 			}
 		}
 	}
+	
+	void beginData() {
+		Wire.beginTransmission(_address);
+		Wire.write(OLED_DATA_MODE);
+	}
+	
+	void endData() {		
+		Wire.endTransmission();
+		_writes = 0;		
+	}
 
 private:
 	// получить "столбик-байт" буквы
@@ -833,17 +843,7 @@ private:
 		} else {
 			return pgm_read_byte(&(charMap[font - 1][row]));	// для кастомных (ё)
 		}		
-	}
-	
-	void beginData() {
-		Wire.beginTransmission(_address);
-		Wire.write(OLED_DATA_MODE);
-	}
-	
-	void endData() {		
-		Wire.endTransmission();
-		_writes = 0;		
-	}
+	}	
 	
 	// ==================== ПЕРЕМЕННЫЕ И КОНСТАНТЫ ====================
 	const uint8_t _address = 0x3C;
