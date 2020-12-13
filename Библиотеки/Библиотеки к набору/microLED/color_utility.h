@@ -2,21 +2,28 @@
 #define MICROLED_INLINE __attribute__((always_inline))
 
 // ============================================== ДАТА ==============================================
+#ifndef COLOR_DEBTH
+#define COLOR_DEBTH 3
+#endif
+
 #if (COLOR_DEBTH == 1)
+//#pragma message "Color debth 1 bit"
 typedef uint8_t mData;
 #elif (COLOR_DEBTH == 2)
+//#pragma message "Color debth 2 bit"
 typedef uint16_t mData;
 #elif (COLOR_DEBTH == 3)
+//#pragma message "Color debth 3 bit"
 struct mData {
 	uint8_t r, g, b;
 	inline mData() MICROLED_INLINE {}
 	inline mData(uint8_t _r, uint8_t _g, uint8_t _b) MICROLED_INLINE :r(_r), g(_g), b(_b) {}
 	inline mData(uint32_t colorcode)  MICROLED_INLINE
-	: r((colorcode >> 16) & 0xFF), g((colorcode >> 8) & 0xFF), b((colorcode >> 0) & 0xFF){}	
+	: r(((uint32_t)colorcode >> 16) & 0xFF), g(((uint32_t)colorcode >> 8) & 0xFF), b(colorcode & 0xFF){}	
 	inline mData& operator= (const uint32_t colorcode) MICROLED_INLINE {
-		r = (colorcode >> 16) & 0xFF;
-		g = (colorcode >>  8) & 0xFF;
-		b = (colorcode >>  0) & 0xFF;
+		r = ((uint32_t)colorcode >> 16) & 0xFF;
+		g = ((uint32_t)colorcode >>  8) & 0xFF;
+		b = colorcode & 0xFF;
 		return *this;
 	}		
 };
@@ -100,13 +107,18 @@ mData mHSVfast(uint8_t h, uint8_t s, uint8_t v);	// HSV 255, 255, 255
 mData mKelvin(int kelvin);							// температура
 
 // ============================================ CRT GAMMA =============================================
+#define getCRT_PGM(x) (pgm_read_byte(&_CRTgammaPGM[x]))
+#define getCRT_SQUARE(x) (((long)(x) * (x) + 255) >> 8)
+#define getCRT_CUBIC(x) (((long)(x) * (x) * (x) + 65535) >> 16)
+
 // по умолчанию CRT_PGM
 #if !defined(CRT_PGM) && !defined(CRT_SQUARE) && !defined(CRT_CUBIC) && !defined(CRT_OFF)
 #define CRT_PGM
 #endif
 
 #if defined(CRT_PGM)
-#define getCRT(x) pgm_read_byte(&_CRTgammaPGM[x])
+//#pragma message "CRT PGM"
+#define getCRT(x) getCRT_PGM(x)
 static const uint8_t _CRTgammaPGM[256] PROGMEM = {
 	0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
 	2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 5,
@@ -127,17 +139,30 @@ static const uint8_t _CRTgammaPGM[256] PROGMEM = {
 };
 
 #elif defined(CRT_SQUARE)
-#define getCRT(x) (((long)(x) * (x) + 255) >> 8)
+//#pragma message "CRT SQUARE"
+#define getCRT(x) getCRT_SQUARE(x)
 
 #elif defined(CRT_CUBIC)
-#define getCRT(x) (((long)(x) * (x) * (x) + 65535) >> 16)
+//#pragma message "CRT CUBIC"
+#define getCRT(x) getCRT_CUBIC(x)
 
 #elif defined(CRT_OFF)
+//#pragma message "CRT OFF"
 #define getCRT(x) (x)
 
 #endif
 
+
 // ============================================== COLOR MACRO ===============================================
+// склейка/расклейка ргб-инт
+#define RGBto24(r,g,b) ( ((uint32_t)(r) << 16) | ((g) << 8 ) | (b) )
+#define RGBto16(r,g,b) ( (((r) & 0b11111000) << 8) | (((g) & 0b11111100) << 3) | (((b) & 0b11111000) >> 3) )
+#define RGBto8(r,g,b) ( ((r) & 0b11100000) | (((g) & 0b11000000) >> 3) | (((b) & 0b11100000) >> 5) )
+
+#define RGB24toR(x) (((uint32_t)(x) >> 16) & 0xFF)
+#define RGB24toG(x) (((uint32_t)(x) >> 8) & 0xFF)
+#define RGB24toB(x) ((uint32_t)(x) & 0xFF)
+
 // rrrrrrrr gggggggg bbbbbbbb
 // rrrrrggg gggbbbbb
 // rrrggbbb
@@ -145,6 +170,12 @@ static const uint8_t _CRTgammaPGM[256] PROGMEM = {
 #define RGB888to323(x) ( (((x) & 0xE00000) >> 16) | (((x) & 0xC000) >> 11) | (((x) & 0xE0) >> 5) )
 #define RGB565to888(x) ( (((x) & 0xF800) << 8) | (((x) & 0x7E0) << 5) | (((x) & 0x1F) << 3) )
 #define RGB323to888(x) ( (((x) & 0xE0) << 16) | (((x) & 0x18) << 11) | (((x) & 0x7) << 5) )
+
+// дубли
+#define RGB24to16(x) RGB888to565(x)
+#define RGB24to8(x) RGB888to323(x)
+#define RGB16to24(x) RGB565to888(x)
+#define RGB8to24(x) RGB323to888(x)
 
 // макросы распаковки и упаковки цветов
 #if (COLOR_DEBTH == 1)
@@ -181,7 +212,7 @@ mData getFade(mData data, uint8_t val) {
 }
 
 uint32_t getHEX(mData data) {
-	return (((uint32_t)getR(data) << 16) | ((uint32_t)getG(data) << 8 ) | (uint32_t)getB(data));
+	return RGBto24(getR(data), getG(data), getB(data));
 }
 
 mData getBlend(int x, int amount, mData c0, mData c1) {
@@ -246,7 +277,7 @@ mData mHSV(uint8_t h, uint8_t s, uint8_t v) {
 }
 
 mData mHEX(uint32_t color) {
-	return mRGB( (color >> 16) & 0xFF, (color >> 8) & 0xFF, color & 0xFF );
+	return mRGB(RGB24toR(color), RGB24toG(color), RGB24toB(color));
 }
 
 mData mWheel(int color, uint8_t bright) {
