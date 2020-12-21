@@ -1,4 +1,5 @@
-﻿#pragma once
+﻿#ifndef GyverOLED_h
+#define GyverOLED_h
 /*
 GyverOLED - лёгкая и быстрая библиотека для OLED дисплея
 - Поддержка OLED дисплеев на SSD1306/SSH1106 с разрешением 128х64 и 128х32 с подключением по I2C
@@ -870,3 +871,4 @@ private:
 	uint8_t *_buf_ptr;
 	bool _buf_flag = false;	
 };
+#endif
