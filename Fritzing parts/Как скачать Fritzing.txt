@@ -1,0 +1,12 @@
+Офф сайт
+https://fritzing.org/download - почему то платный
+
+Репозиторий
+https://github.com/fritzing/fritzing-app/
+
+Релизы
+https://github.com/fritzing/fritzing-app/releases
+
+Релиз CD-548 для всех ОС
+Ссылка на релиз для Win10
+https://github.com/fritzing/fritzing-app/releases/download/CD-548/fritzing-3d61c58421bdb63ca903bb5d11310a257f1ec0ed-develop-548.windows.64.zip
