@@ -23,11 +23,11 @@ public:
 	
 	float computeTemp(int analog) {		// получить температуру из 10 бит сигнала АЦП
 		float temp;
-		temp = _resistBase / ((float)1024 / analog - 1);
+		temp = _resistBase / (1024.0f / analog - 1);
 		temp /= (float)_resistance;                 // (R/Ro)
 		temp = log(temp) / _beta;            		// 1/B * ln(R/Ro)
-		temp += (float)1.0 / (_tempBase + 273.15);  // + (1/To)
-		temp = (float)1.0 / temp - 273.15;    		// инвертируем и конвертируем в градусы по Цельсию
+		temp += 1.0f / (_tempBase + 273.15);  // + (1/To)
+		temp = 1.0f / temp - 273.15;    		// инвертируем и конвертируем в градусы по Цельсию
 		return temp;
 	}
 	

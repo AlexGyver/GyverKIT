@@ -1,0 +1,34 @@
+#######################################
+# Syntax Coloring Map For EncButton
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+EncButton	KEYWORD1
+
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+tick	KEYWORD2
+getState	KEYWORD2
+resetState	KEYWORD2
+isFast	KEYWORD2
+isTurn	KEYWORD2
+isRight	KEYWORD2
+isLeft	KEYWORD2
+isRightH	KEYWORD2
+isLeftH	KEYWORD2
+isClick	KEYWORD2
+isHolded	KEYWORD2
+isHold	KEYWORD2
+isStep	KEYWORD2
+counter	KEYWORD2
+state	KEYWORD2
+hasClicks	KEYWORD2
+clicks	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
