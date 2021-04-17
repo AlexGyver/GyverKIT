@@ -25,6 +25,9 @@
 	v1.6 - Исправлена остановка для STEPPER4WIRE_HALF, скорость можно задавать во float (для медленных скоростей)
 	v1.7 - Исправлен баг в отрицательной скорости (спасибо Евгению Солодову)
 	v1.8 - Исправлен режим KEEP_SPEED
+	v1.9 - Исправлена ошибка с esp функцией max
+	v1.10 - повышена точность
+	v1.11 - повышена точность задания скорости
 	
 	Алгоритм из AccelStepper: https://www.airspayce.com/mikem/arduino/AccelStepper/
 	AlexGyver, 2020
@@ -154,6 +157,7 @@ uint32_t stepTime;
 #define degPerMinute(x) ((x)/60.0f)
 #define degPerHour(x) ((x)/3600.0f)
 #define _sign(x) ((x) >= 0 ? 1 : -1)	// знак числа
+#define maxMacro(a,b) ((a)>(b)?(a):(b))	// привет esp
 
 enum GS_driverType {
 	STEPPER2WIRE,
@@ -217,7 +221,8 @@ public:
 		if (_smoothStart && _curMode) smoothSpeedPlanner();
 		
 		if (_workState && micros() - _prevTime >= stepTime) {
-			_prevTime = micros();			
+			//_prevTime = micros();			
+			_prevTime += stepTime;
 			// FOLLOW_POS
 			if (!_curMode && _target == _current) {
 				brake();
@@ -240,11 +245,7 @@ public:
 				// ~4 us
 				setPin(1, (_dir > 0 ? _globDir : !_globDir) );
 				setPin(0, 1);	// HIGH
-#ifdef __AVR__
-				_delay_us(DRIVER_STEP_TIME);
-#else
 				delayMicroseconds(DRIVER_STEP_TIME);
-#endif
 				setPin(0, 0);	// LOW
 			} else {
 				// ~5.7 us	
@@ -283,7 +284,7 @@ public:
 
 	// установка максимальной скорости в шагах/секунду и градусах/секунду
 	void setMaxSpeed(float speed) {
-		_maxSpeed = max(speed, MIN_STEPPER_SPEED);	// 1 шаг в час минимум
+		_maxSpeed = maxMacro(speed, MIN_STEPPER_SPEED);	// 1 шаг в час минимум
 		recalculateSpeed();
 		
 #ifdef SMOOTH_ALGORITHM
@@ -361,7 +362,7 @@ public:
 			// горячий привет тупому компилятору ESP8266 и индусам, которые его настраивали
 			int speed1 = abs(_speed);
 			int speed2 = abs((int)_accelSpeed);
-			int maxSpeed = max(speed1, speed2);
+			int maxSpeed = maxMacro(speed1, speed2);
 			_smoothPlannerPrd = map(maxSpeed, 1000, 20000, 15000, 1000);
 #endif
 			
@@ -369,7 +370,7 @@ public:
 		} else {		// резкий старт
 			if (_speed == 0) {brake(); return;}	// скорость 0? Отключаемся и выходим
 			_accelSpeed = _speed;
-			stepTime = 1000000.0 / abs(_speed);
+			stepTime = round(1000000.0 / abs(_speed));
 			_dir = (_speed > 0) ? 1 : -1;	
 		}
 		_workState = true;
@@ -428,7 +429,7 @@ private:
 	void setPin(int num, bool state) {
 #ifdef __AVR__
 		if (state) *_port_reg[num] |= _bit_mask[num];
-		else *_port_reg[num] &= ~ _bit_mask[num];
+		else *_port_reg[num] &= ~_bit_mask[num];
 #else
 		digitalWrite(_pins[num], state);
 #endif				

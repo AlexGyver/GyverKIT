@@ -3,52 +3,63 @@
 /*
 	Ультра лёгкая и быстрая библиотека для энкодера, энкодера с кнопкой или просто кнопки
 	- Максимально быстрое чтение пинов для AVR (ATmega328/ATmega168, ATtiny85/ATtiny13)
-	- Быстрые и лёгкие алгоритмы кнопки и энкодера
 	- Оптимизированный вес
-	- Гашение дребезга кнопки
-	- Клик, несколько кликов, удержание, режим step
-	- Встроенный счётчик энкодера
+	- Быстрые и лёгкие алгоритмы кнопки и энкодера
+	- Энкодер: поворот, нажатый поворот, быстрый поворот, счётчик
+	- Кнопка: антидребезг, клик, несколько кликов, счётчик кликов, удержание, режим step
 	- Подключение - high pull
+	- Опциональный режим callback (+22б SRAM на каждый экземпляр)
 */
 
-// =========== НАСТРОЙКИ ============
-#define EB_FAST 30     	// таймаут быстрого поворота
-#define EB_DEB 80      	// дебаунс кнопки
-#define EB_HOLD 1000   	// таймаут удержания кнопки
-#define EB_STEP 500    	// период срабатывания степ
-#define EB_CLICK 400	// таймаут накликивания
+// =========== НАСТРОЙКИ (можно передефайнить из скетча) ============
+#define _EB_FAST 30     // таймаут быстрого поворота
+#define _EB_DEB 80      // дебаунс кнопки
+#define _EB_HOLD 1000   // таймаут удержания кнопки
+#define _EB_STEP 500    // период срабатывания степ
+#define _EB_CLICK 400	// таймаут накликивания
 
 // =========== НЕ ТРОГАЙ ============
 #include <Arduino.h>
+#include "FastIO.h"
 // флаг макро
 #define _setFlag(x) (flags |= 1 << x)
 #define _clrFlag(x) (flags &= ~(1 << x))
 #define _readFlag(x) ((flags >> x) & 1)
 
-// быстрое чтение пина
-bool fastRead(const uint8_t pin) {
-#if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__)
-	if (pin < 8) return bitRead(PIND, pin);
-	else if (pin < 14) return bitRead(PINB, pin - 8);
-	else if (pin < 20) return bitRead(PINC, pin - 14);
-	
-#elif defined(__AVR_ATtiny85__) || defined(__AVR_ATtiny13__)
-	return bitRead(PINB, pin);
-	
-#elif defined(AVR)
-	uint8_t *_pin_reg = portInputRegister(digitalPinToPort(pin));
-	uint8_t _bit_mask = digitalPinToBitMask(pin);
-	return bool(*_pin_reg & _bit_mask);
-
-#else
-	return digitalRead(pin);
-
+#ifndef EB_FAST
+#define EB_FAST _EB_FAST
 #endif
-	return 0;
-}
+#ifndef EB_DEB
+#define EB_DEB _EB_DEB
+#endif
+#ifndef EB_HOLD
+#define EB_HOLD _EB_HOLD
+#endif
+#ifndef EB_STEP
+#define EB_STEP _EB_STEP
+#endif
+#ifndef EB_CLICK
+#define EB_CLICK _EB_CLICK
+#endif
+
+enum eb_callback {
+	TURN_HANDLER,
+	RIGHT_HANDLER,
+	LEFT_HANDLER,
+	RIGHT_H_HANDLER,
+	LEFT_H_HANDLER,
+	CLICK_HANDLER,
+	HOLDED_HANDLER,
+	STEP_HANDLER,
+	HOLD_HANDLER,
+	CLICKS_HANDLER,
+};
+
+#define EB_TICK 0
+#define EB_CALLBACK 1
 
 // класс
-template < uint8_t S1, uint8_t S2 = 255, uint8_t KEY = 255 >
+template < bool MODE, uint8_t S1, uint8_t S2 = 255, uint8_t KEY = 255 >
 class EncButton {
 public:
 	EncButton() {
@@ -57,11 +68,11 @@ public:
 		} else if (KEY == 255) { // энк без кнопки
 			pinMode(S1, INPUT_PULLUP);
 			pinMode(S2, INPUT_PULLUP);
-		} else {                // энк с кнопкой
+		} else {                 // энк с кнопкой
 			pinMode(S1, INPUT_PULLUP);
 			pinMode(S2, INPUT_PULLUP);
 			pinMode(KEY, INPUT_PULLUP);
-		}
+		}		
 	}
 
 	void tick(bool hold = 0) {
@@ -70,7 +81,7 @@ public:
 
 		// обработка энка (компилятор вырежет блок если не используется)
 		if (S1 != 255 && S2 != 255) {
-			byte state = fastRead(S1) | (fastRead(S2) << 1);                    // получаем код
+			uint8_t state = fastRead(S1) | (fastRead(S2) << 1);                 // получаем код
 			if (_readFlag(0) && state == 0b11) {                             	// ресет и энк защёлкнул позицию
 				if (S2 == 255 || KEY != 255) {                                  // энкодер с кнопкой
 					if (!_readFlag(4)) {                                        // если кнопка не "удерживается"
@@ -81,8 +92,13 @@ public:
 					if (_lastState == 0b10) EBState = 1, counter++;
 					else if (_lastState == 0b01) EBState = 2, counter--;
 				}
-				if (EBState != 0 && debounce < EB_FAST) _setFlag(1);          // режим быстрого поворота
-				else _clrFlag(1);
+				if (EBState != 0) {
+					if (MODE) _dir = EBState;
+					
+					if (debounce < EB_FAST) _setFlag(1);	// быстрый поворот
+					else _clrFlag(1);						// обычный поворот					
+				}
+				
 				_clrFlag(0);
 				_debTimer = thisMls;
 			}
@@ -135,29 +151,63 @@ public:
 				} else if (clicks > 0 && debounce > EB_CLICK && !_readFlag(5)) flags |= 0b01100000;	 // флаг на клики
 			}
 		}
+		if (MODE) {
+			if (*_callback[0] && isTurn()) _callback[0]();
+			switch (EBState) {
+			case 1: if (*_callback[1]) _callback[1](); break;	// isRight			
+			case 2: if (*_callback[2]) _callback[2](); break;	// isLeft			
+			case 3: if (*_callback[3]) _callback[3](); break;	// isRightH			
+			case 4: if (*_callback[4]) _callback[4](); break;	// isLeftH			
+			case 5: if (*_callback[5]) _callback[5](); break;	// isClick			
+			case 6: if (*_callback[6]) _callback[6](); break;	// isHolded			
+			case 7: if (*_callback[7]) _callback[7](); break;	// isStep					
+			}
+			EBState = 0;
+			if (*_callback[8] && _readFlag(4)) _callback[8](); 	// isHold
+			if (_readFlag(6)) {			
+				if (*_callback[9]) _callback[9]();				// clicks
+				if (*_callback[10] && clicks == _amount) _callback[10]();
+				_clrFlag(6);
+			}		
+		}
 	}
 
-	byte getState() { return EBState; }
+	void attach(eb_callback type, void (*handler)()) {
+		_callback[type] = *handler;
+	}
+	void detach(eb_callback type) {
+		_callback[type] = NULL;
+	}
+	void attachClicks(uint8_t amount, void (*handler)()) {
+		_amount = amount;
+		_callback[10] = *handler;
+	}
+	void detachClicks() {
+		_callback[10] = NULL;
+	}
+	
+	bool isRight() { return MODE ? (_dir == 1 ? 1 : 0) : checkState(1); }
+	bool isLeft() { return MODE ? (_dir == 2 ? 1 : 0) : checkState(2); }
+	bool isRightH() { return MODE ? (_dir == 3 ? 1 : 0) : checkState(3); }
+	bool isLeftH() { return MODE ? (_dir == 4 ? 1 : 0) : checkState(4); }
+
+	uint8_t getState() { return EBState; }
 	void resetState() { EBState = 0; }
 	bool isFast() { return _readFlag(1); }
 	bool isTurn() { return (EBState > 0 && EBState < 5); }
-	bool isRight() { return checkState(1); }
-	bool isLeft() { return checkState(2); }
-	bool isRightH() { return checkState(3); }
-	bool isLeftH() { return checkState(4); }
 	bool isClick() { return checkState(5); }
 	bool isHolded() { return checkState(6); }
 	bool isHold() { return _readFlag(4); }
 	bool isStep() { return checkState(7); }
 	bool state() { return !fastRead(S1); }
-	bool hasClicks(byte numClicks) {
+	bool hasClicks(uint8_t numClicks) {
 		if (clicks == numClicks && _readFlag(6)) {
 			_clrFlag(6);
 			return 1;
 		}
 		return 0;
 	}
-	byte hasClicks() {
+	uint8_t hasClicks() {
 		if (_readFlag(6)) {
 			_clrFlag(6);
 			return clicks;
@@ -165,19 +215,25 @@ public:
 	}
 
 	int counter = 0;
-	byte clicks = 0;
+	uint8_t clicks = 0;
 
 private:
-	bool checkState(byte val) {
+	bool checkState(uint8_t val) {
 		if (EBState == val) {
 			EBState = 0;
 			return 1;
 		} return 0;
 	}
 	uint32_t _debTimer = 0;
-	byte _lastState = 0, EBState = 0;
+	uint8_t _lastState = 0, EBState = 0;
 	bool _btnState = 0;
-	byte flags = 0;	
+	uint8_t flags = 0;
+	
+
+	uint8_t _dir = 0;
+	void (*_callback[MODE ? 11 : 0])() = {};
+	uint8_t _amount = 0;
+
 
 	// flags
 	// 0 - enc reset
