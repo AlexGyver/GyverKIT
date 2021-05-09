@@ -9,6 +9,9 @@
 	- Кнопка: антидребезг, клик, несколько кликов, счётчик кликов, удержание, режим step
 	- Подключение - high pull
 	- Опциональный режим callback (+22б SRAM на каждый экземпляр)
+	
+	v1.1 - пуллап отдельныи методом
+	v1.2 - можно передать конструктору параметр INPUT_PULLUP
 */
 
 // =========== НАСТРОЙКИ (можно передефайнить из скетча) ============
@@ -62,7 +65,10 @@ enum eb_callback {
 template < bool MODE, uint8_t S1, uint8_t S2 = 255, uint8_t KEY = 255 >
 class EncButton {
 public:
-	EncButton() {
+	EncButton(byte mode = INPUT) {
+		if (mode == INPUT_PULLUP) pullUp();
+	}
+	void pullUp() {
 		if (S2 == 255) {         // обычная кнопка
 			pinMode(S1, INPUT_PULLUP);
 		} else if (KEY == 255) { // энк без кнопки
@@ -72,7 +78,7 @@ public:
 			pinMode(S1, INPUT_PULLUP);
 			pinMode(S2, INPUT_PULLUP);
 			pinMode(KEY, INPUT_PULLUP);
-		}		
+		}	
 	}
 
 	void tick(bool hold = 0) {
