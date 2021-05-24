@@ -22,7 +22,7 @@ void loop() {
       Serial.print("~Command: ");
       Serial.println(ir.readInvCommand(), HEX); // Только инвертированная команда
     }
-  } else if (ir.isRepeat()) {                   // Если поймали код повтора
+  } else if (ir.isRepeated()) {                   // Если поймали код повтора
     Serial.print("\nRepeat: ");                   // Выведем последнюю принятый пакет
     Serial.println(ir.readPacket(), HEX);
   }

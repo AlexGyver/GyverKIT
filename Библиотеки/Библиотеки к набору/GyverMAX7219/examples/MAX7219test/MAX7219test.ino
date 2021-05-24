@@ -1,5 +1,5 @@
 //#define MAX_SPI_SPEED 500000	// дефайн для изменения скорости SPI, по умолч 1000000
-#include "GyverMAX7219.h"
+#include <GyverMAX7219.h>
 
 #define AM_W 4*8  // 4 матрицы (32 точки)
 #define AM_H 2*8  // 2 матрицы (16 точек)
@@ -163,8 +163,8 @@ void lines() {
     mtrx.update();
     delay(30);
   }
-  for (int i = AM_H - 1; i > 0; i -= 3) {
-    mtrx.line(AM_W - 1, 0, 0, i);
+  for (int i = 0; i < AM_H; i += 3) {
+    mtrx.line(AM_W - 1, AM_H - 1, 0, i);
     mtrx.update();
     delay(30);
   }

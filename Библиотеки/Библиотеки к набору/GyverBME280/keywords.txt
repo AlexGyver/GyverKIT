@@ -14,7 +14,7 @@ GyverBME280	KEYWORD1
 begin	KEYWORD2
 isMeasuring	KEYWORD2 
 setFilter	KEYWORD2
-setMode		KEYWORD2
+setMode	KEYWORD2
 setStandbyTime	KEYWORD2
 setHumOversampling	KEYWORD2
 setTempOversampling	KEYWORD2

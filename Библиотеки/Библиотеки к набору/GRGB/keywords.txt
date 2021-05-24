@@ -1,0 +1,57 @@
+#######################################
+# Syntax Coloring Map For GRGB
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+GRGB	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+setRGB	KEYWORD2
+setHSVfast	KEYWORD2
+setHSV	KEYWORD2
+setWheel	KEYWORD2
+setWheel8	KEYWORD2
+setKelvin	KEYWORD2
+setHEX	KEYWORD2
+setHEX16	KEYWORD2
+setColor	KEYWORD2
+setBrightness	KEYWORD2
+setCRT	KEYWORD2
+tick	KEYWORD2
+fadeMode	KEYWORD2
+R	KEYWORD2
+G	KEYWORD2
+B	KEYWORD2
+setFadePeriod	KEYWORD2
+attach	KEYWORD2
+detach	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+
+COMMON_CATHODE	LITERAL1
+COMMON_ANODE	LITERAL1
+GWhite	LITERAL1
+GSilver	LITERAL1
+GGray	LITERAL1
+GBlack	LITERAL1
+GRed	LITERAL1
+GMaroon	LITERAL1
+GOrange	LITERAL1
+GYellow	LITERAL1
+GOlive	LITERAL1
+GLime	LITERAL1
+GGreen	LITERAL1
+GAqua	LITERAL1
+GTeal	LITERAL1
+GBlue	LITERAL1
+GNavy	LITERAL1
+GMagenta	LITERAL1
+GPurple	LITERAL1

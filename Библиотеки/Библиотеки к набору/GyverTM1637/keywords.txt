@@ -22,13 +22,13 @@ displayClockTwist	KEYWORD2
 displayClockScroll	KEYWORD2
 
 runningString	KEYWORD2
-scroll		KEYWORD2
+scroll	KEYWORD2
 scrollByte	KEYWORD2
-twist		KEYWORD2
+twist	KEYWORD2
 twistByte	KEYWORD2
 
-clear		KEYWORD2
-point		KEYWORD2
+clear	KEYWORD2
+point	KEYWORD2
 brightness	KEYWORD2
 digToHEX	KEYWORD2
 
