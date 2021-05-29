@@ -1,5 +1,5 @@
 /*
-    Ультра лёгкая библиотека для работы с RTC DS3231
+    Лёгкая библиотека для работы с RTC DS3231 для Arduino
     Документация: 
     GitHub: https://github.com/GyverLibs/microDS3231
     Возможности:

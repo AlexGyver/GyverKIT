@@ -37,6 +37,8 @@ public:
     MAX7219() : GyverGFX(width * 8, height * 8) {
         begin();
     }
+    
+    // запустить
     void begin() {
         pinMode(CSpin, OUTPUT);
         if (DATpin == CLKpin) {
@@ -51,21 +53,33 @@ public:
         sendCMD(0x0b, 0x0f);  // отображаем всё
         sendCMD(0x0C, 0x01);  // включить
     }
+    
+    // установить яркость [0-15]
     void setBright(byte value) {	// 8x8: 0/8/15 - 30/310/540 ma
         sendCMD(0x0a, value);		// яркость 0-15
     }
+    
+    // переключить питание
     void setPower(bool value) {
         sendCMD(0x0c, value);
     }
+    
+    // очистить
     void clear() {
         fillByte(0);
     }
+    
+    // залить
     void fill() {
         fillByte(255);
     }
+    
+    // залить байтом
     void fillByte(byte data) {
         for (int i = 0; i < width * height * 8; i++) buffer[i] = data;      
     }
+    
+    // установить точку
     void dot(int x, int y, byte fill = 1) {
         if (x >= 0 && x < width * 8 && y >= 0 && y < height * 8) {
             if ((y >> 3) & 1) {               	// если это нечётная матрица: (y / 8) % 2
@@ -78,6 +92,7 @@ public:
         }
     }
 
+    // получить точку
     bool get(int x, int y) {
         if (x >= 0 && x < width * 8 && y >= 0 && y < height * 8) {
             if ((y >> 3) & 1) {               	// если это нечётная матрица: (y / 8) % 2
@@ -91,6 +106,7 @@ public:
         return 0;
     }
 
+    // обновить
     void update() {
         int count = 0;
         for (int k = 0; k < 8; k++) {

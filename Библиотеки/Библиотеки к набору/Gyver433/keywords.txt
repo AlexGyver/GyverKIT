@@ -17,6 +17,7 @@ tick	KEYWORD2
 tickWait	KEYWORD2
 readData	KEYWORD2
 size	KEYWORD2
+getSize	KEYWORD2
 
 #######################################
 # Constants (LITERAL1)

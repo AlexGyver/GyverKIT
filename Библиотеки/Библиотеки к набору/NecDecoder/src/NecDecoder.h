@@ -24,7 +24,6 @@
 
 class NecDecoder {
 public:
-    NecDecoder;
     void tick();				// Вызывается при ОТРИЦАТЕЛЬНОМ (FALLING) фронте на пине ИК приемника, например в прерывании
     bool isDecoded();			// Возвращает true когда очередной пакет декодирован
     bool isRepeated();			// Возвращает true если принят флаг повтора команды

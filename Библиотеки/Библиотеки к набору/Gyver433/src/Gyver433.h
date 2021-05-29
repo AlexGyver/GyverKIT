@@ -1,5 +1,5 @@
 /*
-    Суперлёгкая библиотека для радиомодулей 433 МГц
+    Библиотека для радиомодулей 433 МГц и Arduino
     Документация: 
     GitHub: https://github.com/GyverLibs/Gyver433
     Возможности:
@@ -52,16 +52,18 @@
 #define HIGH_MAX (HIGH_PULSE+PULSE_HYST)
 
 // crc
-byte G433_crc(byte *buffer, byte size);
+uint8_t G433_crc(uint8_t *buffer, uint8_t size);
 void G433_crc_byte(uint8_t &crc, uint8_t data);
 
 // ============ ПЕРЕДАТЧИК ============
 class Gyver433_TX {
 public:
-    Gyver433_TX(byte pin) : _pin(pin) {
+    Gyver433_TX(uint8_t pin) {
 #if defined(__AVR__)
         _port_reg = portOutputRegister(digitalPinToPort(pin));
-        _bit_mask = digitalPinToBitMask(pin);		
+        _bit_mask = digitalPinToBitMask(pin);
+#else
+        _pin = pin;
 #endif
         pinMode(pin, OUTPUT);
     }
@@ -73,7 +75,7 @@ public:
         for (uint16_t i = 0; i < sizeof(T); i++) buffer[i] = *ptr++;
         buffer[sizeof(T)] = G433_crc(buffer, sizeof(T));	// CRC последним байтом
         bool flag = 0;										// флаг дрыга
-        for (byte i = 0; i < 30; i++) {						// 30 импульсов для синхронизации
+        for (uint8_t i = 0; i < 30; i++) {						// 30 импульсов для синхронизации
             flag = !flag;
             fastDW(flag);
             delayMicroseconds(HIGH_PULSE);
@@ -81,7 +83,7 @@ public:
         fastDW(1);											// старт бит
         delayMicroseconds(START_PULSE);  					// старт бит
         for (int n = 0; n < sizeof(T) + 1; n++) {			// буфер + CRC
-            for (byte b = 0; b < 8; b++) {
+            for (uint8_t b = 0; b < 8; b++) {
                 fastDW(flag);
                 flag = !flag;
                 if (bitRead(buffer[n], b)) delayMicroseconds(HIGH_PULSE);
@@ -100,11 +102,13 @@ private:
         digitalWrite(_pin, state);
 #endif
     }
-    byte buffer[G433_BUFSIZE];
-    const byte _pin;
+    uint8_t buffer[G433_BUFSIZE];
+    
 #if defined(__AVR__)
     volatile uint8_t *_port_reg;
     volatile uint8_t _bit_mask;
+#else
+    uint8_t _pin;
 #endif
 };
 
@@ -112,15 +116,17 @@ private:
 // ============ ПРИЁМНИК ============
 class Gyver433_RX {
 public:
-    Gyver433_RX(byte pin){
+    Gyver433_RX(uint8_t pin) {
 #if defined(__AVR__)
         _pin_reg = portInputRegister(digitalPinToPort(pin));
         _bit_mask = digitalPinToBitMask(pin);
+#else
+        _pin = pin;
 #endif
     }
     
     // неблокирующий приём, вернёт кол-во успешно принятых байт
-    byte tick() {
+    uint8_t tick() {
         bool newState = fastDR();			// читаем пин
         if (newState != prevState) {  		// ловим изменение сигнала
             uint32_t thisUs = micros();
@@ -132,7 +138,7 @@ public:
                     byteCount = 0;
                     bitCount = 0;
                     size = 0;
-                    for (byte i = 0; i < G433_BUFSIZE; i++) buffer[i] = 0;
+                    for (uint8_t i = 0; i < G433_BUFSIZE; i++) buffer[i] = 0;
                 } else {												// не старт бит
                     parse = 0; 				
                 }
@@ -177,7 +183,7 @@ public:
     }
     
     // блокирующий приём, вернёт кол-во успешно принятых байт
-    byte tickWait() {
+    uint8_t tickWait() {
         do {
             tick(); 
         } while (parse == 2);
@@ -196,6 +202,11 @@ public:
         return true;
     }
     
+    // получить размер принятых данных
+    int getSize() {
+        return size;
+    }
+    
     int size = 0;
     
 private:
@@ -206,14 +217,16 @@ private:
         return digitalRead(_pin);
 #endif
     }
-    byte buffer[G433_BUFSIZE];
+    uint8_t buffer[G433_BUFSIZE];
     bool prevState;
-    byte parse = 0;
+    uint8_t parse = 0;
     uint32_t tmr = 0;
-    byte bitCount = 0, byteCount = 0;
+    uint8_t bitCount = 0, byteCount = 0;
 #if defined(__AVR__)
     volatile uint8_t *_pin_reg;
     volatile uint8_t _bit_mask;
+#else
+    uint8_t _pin;
 #endif
 };
 
@@ -246,9 +259,9 @@ void G433_crc_byte(uint8_t &crc, uint8_t data) {
 #endif
 }
 
-byte G433_crc(byte *buffer, byte size) {
-    byte crc = 0;
-    for (byte i = 0; i < size; i++) G433_crc_byte(crc, buffer[i]);
+uint8_t G433_crc(uint8_t *buffer, uint8_t size) {
+    uint8_t crc = 0;
+    for (uint8_t i = 0; i < size; i++) G433_crc_byte(crc, buffer[i]);
     return crc;
 }
 #endif

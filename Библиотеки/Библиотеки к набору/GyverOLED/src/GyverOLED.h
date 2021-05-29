@@ -47,6 +47,8 @@
     v0.3 (26.03.2021) - добавил кривую Безье
     v0.4 (10.04.2021) - совместимость с есп
     v0.5 (09.05.2021) - добавлена поддержка SPI и SSH1106 (только буфер)! gnd-vcc-sck-data-rst-dc-cs
+    
+    v1.0 - релиз
 */
 
 #ifndef GyverOLED_h
@@ -225,7 +227,7 @@ public:
         }
     }
     
-    // яркость
+    // яркость 0-15
     void setContrast(uint8_t value) { sendCommand(OLED_CONTRAST, value); }
     
     // вкл/выкл

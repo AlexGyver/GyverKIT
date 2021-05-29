@@ -1,5 +1,5 @@
 /*
-    Лёгкая библиотека для работы с BME280 по I2C
+    Лёгкая библиотека для работы с BME280 по I2C для Arduino
     Документация: 
     GitHub: https://github.com/GyverLibs/GyverBME280
     

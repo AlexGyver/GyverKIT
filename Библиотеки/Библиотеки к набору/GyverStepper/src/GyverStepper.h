@@ -1,5 +1,5 @@
 /*
-    GyverStepper - производительная библиотека для управления шаговыми моторами
+    Производительная библиотека для управления шаговыми моторами с Arduino
     Документация: https://alexgyver.ru/gyverstepper/
     GitHub: https://github.com/GyverLibs/GyverStepper
     Возможности:
@@ -36,6 +36,7 @@
     v1.11 - повышена точность задания скорости
     v1.12 - пофикшена плавная работа в KEEP_SPEED. Добавлена поддержка "внешних" драйверов. Убран аргумент SMOOTH из setSpeed
     v1.13 - исправлены мелкие баги, оптимизация
+    v1.14 - исправлены ошибки разгона и торможения в KEEP_SPEED
 */
 
 /*
@@ -330,11 +331,14 @@ public:
         #endif
     }
     void setAccelerationDeg(float accel) 	{ setAcceleration(accel * _stepsPerDeg); }
-
+    
+    // автоотключение питания при остановке
     void autoPower(bool mode) 				{ _autoPower = mode; }
 
+    // плавная остановка с заданным ускорением
     void stop() {
         if (_workState) {
+            resetTimers();
             if (_curMode == FOLLOW_POS) {
                 _accelSpeed = 1000000.0f / stepTime * _dir;
                 setTarget(_current + (float)_accelSpeed * _accelSpeed * _accelInv * _dir);
@@ -347,7 +351,8 @@ public:
             }
         }
     }
-
+    
+    // резкая остановка
     void brake() {		
         disable();
         _accelSpeed = 0;
@@ -356,6 +361,7 @@ public:
         #endif		
     }
     
+    // остановка и сброс позиции в 0
     void reset() {
         brake();
         setCurrent(0);
@@ -401,15 +407,18 @@ public:
     void setRunMode(GS_runMode mode){
         _curMode = mode; 
         if (mode == FOLLOW_POS) _smoothStart = false;
+        resetTimers();
     }
-
+    
+    // получить статус вкл/выкл
     bool getState()					{ return _workState; }
-
+    
+    // включить мотор
     void enable() {
-        _workState = true; 
+        _workState = true;
+        resetTimers();
         if (!_powerState) {
-            _powerState = true;
-            _smoothPlannerTime = _plannerTime = _prevTime = micros();	// сбросить все таймеры
+            _powerState = true;            
             if (_autoPower) {
                 if (_TYPE == STEPPER_PINS) {
                     // подадим прошлый сигнал на мотор, чтобы вал зафиксировался
@@ -419,7 +428,8 @@ public:
             }
         }
     }
-
+    
+    // выключить мотор
     void disable() {
         _workState = false;
         if (_powerState) {
@@ -437,18 +447,35 @@ public:
             }
         }
     }	
-
+    
+    // получить минимальный период, с которым нужно вызывать tick при заданной макс. скорости
     uint32_t getMinPeriod() {
         if (_curMode == KEEP_SPEED) return abs(1000000.0 / _speed);
         else return (1000000.0 / _maxSpeed);
     }
 
+    // время между шагами
     uint32_t stepTime = 10000;
     
+    // подключить обработчик шага
     void attachStep(void (*handler)(uint8_t)) 	{ _step = handler; }
+    
+    // подключить обработчик питания
     void attachPower(void (*handler)(bool)) 	{ _power = handler; }
 
 private:
+    // аккуратно сбросить все таймеры
+    void resetTimers() {
+        uint32_t us = micros();
+        if (_curMode) {
+            if (us - _smoothPlannerTime >= _smoothPlannerPrd) _smoothPlannerTime += _smoothPlannerPrd * ((us - _smoothPlannerTime) / _smoothPlannerPrd);
+        } else {
+            if (us - _plannerTime >= _plannerPrd) _plannerTime += _plannerPrd * ((us - _plannerTime) / _plannerPrd);
+            if (us - _prevTime >= stepTime) _prevTime += stepTime * ((us - _prevTime) / stepTime);
+        }
+        //_smoothPlannerTime = _plannerTime = _prevTime = micros();        
+    }
+    
     // настройка пина
     void configurePin(int num, int8_t pin) {
         #ifdef __AVR__
