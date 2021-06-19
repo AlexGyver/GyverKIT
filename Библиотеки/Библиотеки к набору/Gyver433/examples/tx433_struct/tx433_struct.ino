@@ -1,10 +1,10 @@
 // передача структуры данных
-// мелкий передатчик 3.6V SYN115
 
-#define G433_BUFSIZE 50   // размер буфера
-#define G433_SPEED 2000   // скорость бит/сек (минимальная)
+//#define G433_SPEED 1000   // скорость 100-8000 бит/с, по умолч. 2000 бит/с
+#define G433_SLOW // отправляю раз в секунду на SYN480R
+
 #include <Gyver433.h>
-Gyver433_TX tx(2);  // указали пин
+Gyver433_TX<2, 10> tx;  // указали пин и размер буфера
 
 // формат пакета для отправки
 struct dataPack {
@@ -25,13 +25,14 @@ void loop() {
   data.analog = analogRead(0);    // тут ацп
   data.time = millis();           // тут миллис
 
-  Serial.println("Transmit:");
+  tx.sendData(data);
+  
+  Serial.println("Transmitted:");
   Serial.println(data.counter);
   Serial.println(data.randomNum);
   Serial.println(data.analog);
   Serial.println(data.time);
   Serial.println();
 
-  tx.sendData(data);
   delay(1000);
 }
