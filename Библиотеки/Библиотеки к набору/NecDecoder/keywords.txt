@@ -13,6 +13,8 @@ NecDecoder	KEYWORD1
 #######################################
 
 tick	KEYWORD2
+attachDecode	KEYWORD2	
+attachRepeat	KEYWORD2
 isDecoded	KEYWORD2
 isRepeated	KEYWORD2
 readPacket	KEYWORD2
@@ -27,3 +29,5 @@ packetIsValid	KEYWORD2
 #######################################
 # Constants (LITERAL1)
 #######################################
+
+NEC_FLOW_CONTROL	LITERAL1

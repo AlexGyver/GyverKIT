@@ -18,6 +18,7 @@
     v1.0 - релиз
     v1.1 - оптимизация, новый интерфейс, поддержка дешёвых синих модулей, работа в прерывании
     v1.2 - улучшение качества связи, оптимизация работы в прерывании
+    v1.3 - добавлен вывод RSSI
 */
 
 #ifndef Gyver433_h
@@ -32,6 +33,10 @@ uint8_t G433_crc_xor(uint8_t *buffer, uint8_t size);    // ручной CRC XOR
 // =========================================================================
 #ifndef G433_SPEED
 #define G433_SPEED 2000
+#endif
+
+#ifndef G433_RSSI_COUNT
+#define G433_RSSI_COUNT 10
 #endif
 
 // тайминги интерфейса
@@ -188,16 +193,29 @@ public:
     uint16_t gotData() {
         if (parse == 2 && millis() - tmr2 >= 10) {              // фрейм не закрыт
             parse = size = 0;                                   // приём окончен   
-            if (byteCount > 1) {                                // если что то приняли
-                if (CRC_MODE == G433_CRC8) {                    // CRC8 
-                    if (!G433_crc8(buffer, byteCount)) size = byteCount - 2;
-                } else if (CRC_MODE == G433_XOR) {              // CRC XOR
-                    if (!G433_crc_xor(buffer, byteCount)) size = byteCount - 2;
-                } else size = byteCount - 1;                    // без CRC
+            if (byteCount > (1 + !!CRC_MODE)) {                 // если что то приняли
+                if (!bitCount) {                                // байт закрыт
+                    if (CRC_MODE == G433_CRC8) {                // CRC8 
+                        if (!G433_crc8(buffer, byteCount)) size = byteCount - 2;
+                    } else if (CRC_MODE == G433_XOR) {          // CRC XOR
+                        if (!G433_crc_xor(buffer, byteCount)) size = byteCount - 2;
+                    } else size = byteCount - 1;                // без CRC
+                }
+                // расчёт RSSI
+                if (!size) errCount++;
+                if (++rcCount >= G433_RSSI_COUNT) {
+                    RSSI = 100 - errCount * 100 / G433_RSSI_COUNT;
+                    errCount = rcCount = 0;
+                }
             }
             return size;
         }
         return 0;
+    }
+    
+    // получить качество приёма (процент успешных передач)
+    uint8_t getRSSI() {
+        return RSSI;
     }
     
     // получить размер принятых данных
@@ -270,6 +288,7 @@ private:
     uint8_t parse = 0;
     uint32_t tmr = 0, tmr2 = 0;
     uint8_t bitCount = 0, byteCount = 0;
+    uint8_t errCount = 0, rcCount = 0, RSSI = 0;
 };
 
 // ===== CRC =====

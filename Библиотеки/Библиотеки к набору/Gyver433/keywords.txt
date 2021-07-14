@@ -26,6 +26,7 @@ getSize	KEYWORD2
 gotData	KEYWORD2
 G433_crc8	KEYWORD2
 G433_crc_xor	KEYWORD2
+getRSSI	KEYWORD2
 
 #######################################
 # Constants (LITERAL1)

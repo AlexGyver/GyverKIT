@@ -31,6 +31,9 @@ void loop() {
     // принятые данные доступны в .buffer
     // и имеют размер .size
     Serial.write(rx.buffer, rx.size);
-    Serial.println();
+
+    // выведем также качество связи
+    Serial.print(", RSSI: ");
+    Serial.println(rx.getRSSI());
   }
 }

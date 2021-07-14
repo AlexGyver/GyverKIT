@@ -13,6 +13,7 @@
 
     Версии:
     v1.0 - релиз
+    v1.1 - небольшая оптимизация, повышение точности
 */
 
 #ifndef GyverNTC_h
@@ -32,22 +33,16 @@ public:
     
     // прочитать усреднённую температуру с пина
     float getTempAverage() {
-        int analogAverage = 0;
-        for (byte i = 0; i < _T_SAMPLE_AVERAGE; i++)
-        analogAverage += analogRead(_pin);
-        analogAverage /= (int)_T_SAMPLE_AVERAGE;
-        return computeTemp(analogAverage);
+        uint16_t aver = 0;
+        for (byte i = 0; i < _T_SAMPLE_AVERAGE; i++) aver += analogRead(_pin);
+        return computeTemp((float)aver / _T_SAMPLE_AVERAGE);
     }
     
-    // получить температуру из 10 бит сигнала АЦП
-    float computeTemp(int analog) {
-        float temp;
-        temp = _resistBase / ((float)1024 / analog - 1);
-        temp /= (float)_resistance;                 // (R/Ro)
-        temp = log(temp) / _beta;            		// 1/B * ln(R/Ro)
-        temp += (float)1.0 / (_tempBase + 273.15);  // + (1/To)
-        temp = (float)1.0 / temp - 273.15;    		// инвертируем и конвертируем в градусы по Цельсию
-        return temp;
+    // получить температуру из сигнала АЦП (10 бит, float)
+    float computeTemp(float analog) {
+        analog = (float)_resistBase / _resistance / (1023.0f / analog - 1.0);
+        analog = (log(analog) / _beta) + 1.0f / (_tempBase + 273.15f);
+        return (1.0f / analog - 273.15);
     }
     
 private:    

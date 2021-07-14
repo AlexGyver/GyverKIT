@@ -40,17 +40,19 @@ NecDecoder ir;
 <a id="usage"></a>
 ## Использование
 ```cpp
-void tick();                // Вызывается при ОТРИЦАТЕЛЬНОМ (FALLING) фронте на пине ИК приемника, например в прерывании
-bool isDecoded();           // Возвращает true когда очередной пакет декодирован
-bool isRepeated();          // Возвращает true если принят флаг повтора команды
-uint32_t readPacket();      // Прочитать весь пакет целиком (адрес + ~адрес + команда + ~команда)
-uint8_t readAddress();      // Прочитать только байт с адресом
-uint8_t readInvAddress();   // Прочитать только байт с инвертированным адресом
-uint8_t readCommand();      // Прочитать только байт с командой
-uint8_t readInvCommand();   // Прочитать только байт с инвертированной командой
-bool addressIsValid();      // Вернет true если адрес прошел проверку
-bool commandIsValid();      // Вернет true если команда прошла проверку
-bool packetIsValid();       // Вернет true если весь пакет прошел проверку
+void tick();							  	// Вызывается при ОТРИЦАТЕЛЬНОМ (FALLING) фронте на пине ИК приемника, например в прерывании
+void attachDecode(void (*handler)(void)); 	// 'Подключить' обработчик, вызываемый при декодировании очередного пакета (не обязательно)
+void attachRepeat(void (*handler)(void));	// 'Подключить' обработчик, вызываемый при получении команды повтора (не обязательно)
+bool isDecoded();						  	// Возвращает true, когда очередной пакет декодирован
+bool isRepeated();						  	// Возвращает true, если принят флаг повтора команды
+uint32_t readPacket();					  	// Прочитать весь пакет целиком (адрес + ~адрес + команда + ~команда)
+uint8_t readAddress();					  	// Прочитать только байт с адресом
+uint8_t readInvAddress();				  	// Прочитать только байт с инвертированным адресом
+uint8_t readCommand();					  	// Прочитать только байт с командой
+uint8_t readInvCommand();				  	// Прочитать только байт с инвертированной командой
+bool addressIsValid();					  	// Вернет true, если адрес прошел проверку
+bool commandIsValid();					  	// Вернет true, если команда прошла проверку
+bool packetIsValid();					  	// Вернет true, если весь пакет прошел проверку
 ```
 
 <a id="example"></a>
@@ -61,40 +63,43 @@ bool packetIsValid();       // Вернет true если весь пакет п
 
 NecDecoder ir;
 
+void ir_edge() {	// Обработчик внешнего прерывания INT0 по спаду FALLING (ОБЯЗАТЕЛЬНО!)
+  ir.tick();  		// Вызываем тикер по спаду
+}
+
 void setup() {
-  Serial.begin(115200);
-  attachInterrupt(0, ir_handler, FALLING);
+  Serial.begin(9600);						// Открываем порт
+  attachInterrupt(0, ir_edge, FALLING);		// Внешнее прерывание INT0, по спаду FALLING
 }
 
 void loop() {
-  if (ir.isDecoded()) {          // Если поймали пакет
-    if (ir.packetIsValid()) {    // И он прошел проверку (еще есть ir.addressIsValid() и ir.commandIsValid())
-      Serial.println("\nNEC packet is decoded & valid");
-      Serial.print("Packet: ");
-      Serial.println(ir.readPacket(), HEX);     // Пакет целиком
-      Serial.print("Address: ");
-      Serial.println(ir.readAddress(), HEX);    // Только адрес
-      Serial.print("~Address: ");
-      Serial.println(ir.readInvAddress(), HEX); // Только инвертированный адрес
-      Serial.print("Command: ");
-      Serial.println(ir.readCommand(), HEX);    // Только комманда
-      Serial.print("~Command: ");
-      Serial.println(ir.readInvCommand(), HEX); // Только инвертированная команда
-    }
-  } else if (ir.isRepeated()) {                   // Если поймали код повтора
-    Serial.print("\nRepeat: ");                   // Выведем последнюю принятый пакет
-    Serial.println(ir.readPacket(), HEX);
+  if (ir.isDecoded()) {          				 // Если поймали пакет
+    if (ir.packetIsValid()) {    				 // И он прошел проверку (еще есть ir.addressIsValid() и ir.commandIsValid())
+      Serial.println("\nNEC packet is decoded"); 
+      Serial.print("Packet: 0x");
+      Serial.println(ir.readPacket(), HEX);      // Пакет целиком
+      Serial.print("Address: 0x");
+      Serial.println(ir.readAddress(), HEX);     // Только адрес
+      Serial.print("~Address: 0x");
+      Serial.println(ir.readInvAddress(), HEX);  // Только инвертированный адрес
+      Serial.print("Command: 0x");
+      Serial.println(ir.readCommand(), HEX);     // Только комманда
+      Serial.print("~Command: 0x");
+      Serial.println(ir.readInvCommand(), HEX);  // Только инвертированная команда
+    } else {
+	  Serial.println("\nNEC packet is damaged"); // Иначе - пакет поврежден		
+	}
+  } else if (ir.isRepeated()) {                  // Если поймали код повтора
+    Serial.print("\nRepeat: 0x");                // Выводим последний принятый пакет
+    Serial.println(ir.readPacket(), HEX);		
   }
-}
-
-void ir_handler() {
-  ir.tick();  // обязательно FALLING фронт (можно и вручную отслеживать)
 }
 ```
 
 <a id="versions"></a>
 ## Версии
 - v1.0
+- v1.1 - исправлены ошибки, добавлена возможность подключения обработчиков, добавлен контроль потока 
 
 <a id="feedback"></a>
 ## Баги и обратная связь
