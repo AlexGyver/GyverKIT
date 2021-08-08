@@ -40,6 +40,7 @@ MicroDS3231 rtc(адрес); // указать свой адрес
 <a id="usage"></a>
 ## Использование
 ```cpp
+bool begin();                   // инициализация, вернет true, если RTC найден
 void setTime(uint8_t param);	// установка времени == времени компиляции
 void setTime(DateTime time);	// установить из структуры DateTime
 void setTime(int8_t seconds, int8_t minutes, int8_t hours, int8_t date, int8_t month, int16_t year);	// установка времени
@@ -130,6 +131,7 @@ void printTime() {
 - v2.2 - исправлены дни недели (пн-вс 1-7)
 - v2.3 - небольшие исправления, оптимизация, изменён порядок вывода даты
 - v2.4 - исправлена установка времени компиляции
+- v2.5 - добавлен begin для проверки наличия модуля на линии
     
 <a id="feedback"></a>
 ## Баги и обратная связь

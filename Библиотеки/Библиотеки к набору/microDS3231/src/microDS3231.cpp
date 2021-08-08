@@ -22,6 +22,12 @@ MicroDS3231::MicroDS3231(uint8_t addr) : _addr(addr) {
     Wire.begin();
 }
 
+bool MicroDS3231::begin(void){
+	Wire.begin();                       // Инит шины
+	Wire.beginTransmission(_addr);      // Зовем DS3231 по адресу
+    return (!Wire.endTransmission());   // если никто не откликнулся - возвращаем false
+}
+
 void MicroDS3231::setTime(int8_t seconds, int8_t minutes, int8_t hours, int8_t date, int8_t month, int16_t year) {
     // защиты от дурака
     month = constrain(month, 1, 12);

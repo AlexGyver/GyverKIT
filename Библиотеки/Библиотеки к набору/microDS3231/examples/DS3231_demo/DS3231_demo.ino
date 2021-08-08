@@ -5,11 +5,22 @@ MicroDS3231 rtc;
 void setup() {
   Serial.begin(9600);
   
-  if (rtc.lostPower()) {  //  при потере питания
-    rtc.setTime(COMPILE_TIME);  // установить время компиляции
+  // проверка наличия модуля на линии i2c
+  if (!rtc.begin()) {
+    Serial.println("DS3231 not found");
+    for(;;);
+  }
+  
+  // АВТОМАТИЧЕСКАЯ УСТАНОВКА ВРЕМЕНИ  
+  if (rtc.lostPower()) {            // при потере питания
+    //rtc.setTime(COMPILE_TIME);    // установить время компиляции ("тяжёлый" способ!!!)
+    
+    // визуально громоздкий, но более "лёгкий" с точки зрения памяти способ установить время компиляции
+    rtc.setTime(BUILD_SEC, BUILD_MIN, BUILD_HOUR, BUILD_DAY, BUILD_MONTH, BUILD_YEAR);
   }
 
-  //rtc.setTime(SEC, MIN, HOUR, DAY, MONTH, YEAR); // устанвока времени вручную
+  //rtc.setTime(SEC, MIN, HOUR, DAY, MONTH, YEAR);      // установка времени вручную, числами или переменными  
+  //rtc.setHMSDMY(HOUR, MIN, SEC, DAY, MONTH, YEAR);    // установка времени вручную, более привычный порядок
 }
 
 void loop() {

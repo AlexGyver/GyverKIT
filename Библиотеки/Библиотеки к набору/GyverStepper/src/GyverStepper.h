@@ -613,7 +613,7 @@ private:
 
         if (_n == 0) {
             _cn = _c0;
-            _dir = _sign(err);;
+            _dir = _sign(err);
         } else {
             _cn = _cn - ((2.0 * _cn) / ((4.0 * _n) + 1));
             _cn = max(_cn, _cmin); 

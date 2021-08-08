@@ -50,6 +50,9 @@
     
     v1.0 - релиз
     v1.1 - улучшен перенос строк (не убирает первый символ просто так)
+    v1.2 - переделан FastIO
+    v1.3 - прямоугольники можно рисовать из любого угла
+    v1.3.1 - пофиксил линии (сломались в 1.3.0)
 */
 
 #ifndef GyverOLED_h
@@ -89,7 +92,7 @@
 #include <Arduino.h>
 #include <Print.h>
 #include "charMap.h"
-#include "FastIO.h"
+#include "FastIO_v2.h"
 
 
 // ============================ БЭКЭНД КОНСТАНТЫ ==============================
@@ -175,15 +178,15 @@ public:
         if (_CONN) {			
             SPI.begin();
             pinMode(_CS, OUTPUT);
-            fastWrite(_CS, 1);
+            F_fastWrite(_CS, 1);
             pinMode(_DC, OUTPUT);			
             if (_RST > 0) {
                 pinMode(_RST, OUTPUT);			
-                fastWrite(_RST, 1);
+                F_fastWrite(_RST, 1);
                 delay(1);
-                fastWrite(_RST, 0);
+                F_fastWrite(_RST, 0);
                 delay(10);
-                fastWrite(_RST, 1);
+                F_fastWrite(_RST, 1);
             }
         } else {
             Wire.begin();
@@ -381,15 +384,21 @@ public:
             int sx, sy, e2, err;
             int dx = abs(x1 - x0);
             int dy = abs(y1 - y0);
-            if (x0 < x1) sx = 1; else sx = -1;
-            if (y0 < y1) sy = 1; else sy = -1;
+            sx = (x0 < x1) ? 1 : -1;
+            sy = (y0 < y1) ? 1 : -1;
             err = dx - dy;
             for (;;) {
                 dot(x0, y0, fill);
-                if (x0==x1 && y0==y1) return;
+                if (x0 == x1 && y0 == y1) return;
                 e2 = err<<1;
-                if (e2 > -dy) { err = err - dy; x0 = x0 + sx; }
-                if (e2 < dx) { err = err + dx; y0 = y0 + sy; }
+                if (e2 > -dy) { 
+                    err -= dy; 
+                    x0 += sx; 
+                }
+                if (e2 < dx) { 
+                    err += dx; 
+                    y0 += sy; 
+                }
             }
         }
     }
@@ -398,6 +407,7 @@ public:
     void fastLineH(int y, int x0, int x1, byte fill = 1) {
         _x = 0;
         _y = 0;
+        if (x0 > x1) _swap(x0, x1);
         if (y < 0 || y > _maxY) return;
         if (x0 == x1) {
             dot(x0, y, fill);
@@ -426,6 +436,7 @@ public:
     void fastLineV(int x, int y0, int y1, byte fill = 1) {
         _x = 0;
         _y = 0;
+        if (y0 > y1) _swap(y0, y1);
         if (x < 0 || x > _maxX) return;
         if (y0 == y1) {
             dot(x, y0, fill);
@@ -466,13 +477,19 @@ public:
     // прямоугольник (лев. верхн, прав. нижн)	
     void rect(int x0, int y0, int x1, int y1, byte fill = 1) {
         _x = 0;
-        _y = 0;
+        _y = 0;        
+        if (x0 > x1) _swap(x0, x1);
+        if (y0 > y1) _swap(y0, y1);
         if (fill == OLED_STROKE) {
             fastLineH(y0, x0+1, x1-1);
             fastLineH(y1, x0+1, x1-1);
             fastLineV(x0, y0, y1);
             fastLineV(x1, y0, y1);
-        } else {		
+        } else {
+            if (x0 == x1 && y0 == y1) {
+                dot(x0, y0, fill);
+                return;
+            }
             if (x0 == x1) {
                 fastLineV(x0, y0, y1);
                 return;
@@ -894,25 +911,25 @@ public:
     
     void beginData() {
         startTransm();
-        if (_CONN) fastWrite(_DC, 1);
+        if (_CONN) F_fastWrite(_DC, 1);
         else sendByteRaw(OLED_DATA_MODE);	
     }
     
     void beginCommand() {
         startTransm();
-        if (_CONN) fastWrite(_DC, 0);
+        if (_CONN) F_fastWrite(_DC, 0);
         else sendByteRaw(OLED_COMMAND_MODE);		
     }
     
     void beginOneCommand() {
         startTransm();
-        if (_CONN) fastWrite(_DC, 0);
+        if (_CONN) F_fastWrite(_DC, 0);
         else sendByteRaw(OLED_ONE_COMMAND_MODE);		
     }
     
     void endTransm() {		
         if (_CONN) {
-            fastWrite(_CS, 1);
+            F_fastWrite(_CS, 1);
             SPI.endTransaction();
         } else {
             Wire.endTransmission();
@@ -923,7 +940,7 @@ public:
     void startTransm() {
         if (_CONN) {
             SPI.beginTransaction(OLED_SPI_SETT);
-            fastWrite(_CS, 0);
+            F_fastWrite(_CS, 0);
         } else Wire.beginTransmission(_address);
     }
 

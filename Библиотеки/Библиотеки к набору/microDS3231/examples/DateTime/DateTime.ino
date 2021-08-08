@@ -3,6 +3,12 @@ MicroDS3231 rtc;
 
 void setup() {
   Serial.begin(9600);
+  
+  // проверка наличия модуля на линии i2c
+  if (!rtc.begin()) {
+    Serial.println("DS3231 not found");
+    for(;;);
+  }
 
   // получаем все данные в структуру
   DateTime now = rtc.getTime();

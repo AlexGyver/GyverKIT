@@ -19,12 +19,13 @@
     v1.1 - оптимизация, новый интерфейс, поддержка дешёвых синих модулей, работа в прерывании
     v1.2 - улучшение качества связи, оптимизация работы в прерывании
     v1.3 - добавлен вывод RSSI
+    v1.4 - переделан FastIO
 */
 
 #ifndef Gyver433_h
 #define Gyver433_h
 #include <Arduino.h>
-#include "FastIO.h"
+#include "FastIO_v2.h"
 
 uint8_t G433_crc8(uint8_t *buffer, uint8_t size);       // ручной CRC8
 uint8_t G433_crc_xor(uint8_t *buffer, uint8_t size);    // ручной CRC XOR
@@ -107,28 +108,28 @@ public:
     // отправка сырого набора байтов
     void write(uint8_t* buf, uint16_t size) {
         for (uint16_t i = 0; i < TRAINING_PULSES; i++) {
-            fastWrite(TX_PIN, 1);
+            F_fastWrite(TX_PIN, 1);
             G433_DELAY(FRAME_TIME);
-            fastWrite(TX_PIN, 0);
+            F_fastWrite(TX_PIN, 0);
             G433_DELAY(FRAME_TIME);
         }
-        fastWrite(TX_PIN, 1);       // старт
+        F_fastWrite(TX_PIN, 1);       // старт
         G433_DELAY(START_PULSE);    // ждём
-        fastWrite(TX_PIN, 0);       // старт бит
+        F_fastWrite(TX_PIN, 0);       // старт бит
         
         #ifdef G433_MANCHESTER
         G433_DELAY(HALF_FRAME);       // ждём
         for (uint16_t n = 0; n < size; n++) {
             uint8_t data = buf[n];
             for (uint8_t b = 0; b < 8; b++) {
-                fastWrite(TX_PIN, !(data & 1));
+                F_fastWrite(TX_PIN, !(data & 1));
                 G433_DELAY(HALF_FRAME);
-                fastWrite(TX_PIN, (data & 1));                
+                F_fastWrite(TX_PIN, (data & 1));                
                 G433_DELAY(HALF_FRAME);
                 data >>= 1;
             }
         }
-        fastWrite(TX_PIN, 0);   // конец передачи
+        F_fastWrite(TX_PIN, 0);   // конец передачи
         #else
         bool flag = 0;
         for (uint16_t n = 0; n < size; n++) {
@@ -136,7 +137,7 @@ public:
             for (uint8_t b = 0; b < 8; b++) {
                 if (data & 1) G433_DELAY(FRAME_TIME);
                 else G433_DELAY(HALF_FRAME);
-                fastWrite(TX_PIN, flag = !flag);
+                F_fastWrite(TX_PIN, flag = !flag);
                 data >>= 1;
             }
         }
@@ -231,7 +232,7 @@ public:
     
 private:
     bool pinChanged() {
-        bit = fastRead(RX_PIN);
+        bit = F_fastRead(RX_PIN);
         if (bit != prevBit) {
             prevBit = bit;
             return 1;

@@ -20,12 +20,14 @@
     v2.2 - исправлены дни недели (пн-вс 1-7)
     v2.3 - небольшие исправления, оптимизация, изменён порядок вывода даты
     v2.4 - исправлена установка времени компиляции
+	v2.5 - добавлен begin для проверки наличия модуля на линии
 */
 
 #ifndef microDS3231_h
 #define microDS3231_h
 //#include <microWire.h>	// выбор между библиотеками Wire и microWire
 #include <Wire.h>
+#include "buildTime.h"
 
 #include <Arduino.h>
 #define COMPILE_TIME F(__TIMESTAMP__)
@@ -43,6 +45,7 @@ struct DateTime {
 class MicroDS3231 {
 public:
     MicroDS3231(uint8_t addr = 0x68);               // конструктор. Можно передать адрес    
+	bool begin(void);								// инициализация, вернет true, если RTC найден
     void setTime(const __FlashStringHelper* stamp);	// установка времени == времени компиляции
     void setTime(DateTime time);	                // установить из структуры DateTime
     void setTime(int8_t seconds, int8_t minutes, int8_t hours, int8_t date, int8_t month, int16_t year);	// установка времени
