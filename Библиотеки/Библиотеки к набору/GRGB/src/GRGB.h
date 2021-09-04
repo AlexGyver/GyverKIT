@@ -26,13 +26,19 @@
 
     Версии:
     v1.0 - релиз
+    v1.1 - добавлен setKelvinFast
+    v1.2 - добавил псевдо 10 бит
+    v1.2.1 - исправлен баг
+    v1.3 - исправлена локальная яркость
+    v1.3.1 - исправлена инверсия для 10 бит
 */
 
-#ifndef GRGB_h
-#define GRGB_h
+#ifndef _GRGB_h
+#define _GRGB_h
 
 #define COMMON_CATHODE 0
 #define COMMON_ANODE 1
+#define GRGB_10BIT 2
 
 enum RGBCOLORS {
     GWhite =	0xFFFF,		// белый
@@ -57,8 +63,8 @@ enum RGBCOLORS {
 class GRGB {
 public:
     // пины в порядке RGB + опционально тип (по умолч. общий катод)
-    GRGB(const uint8_t dir = COMMON_CATHODE, const uint8_t pinR = 0, const uint8_t pinG = 0, const uint8_t pinB = 0) :
-    _pinR(pinR), _pinG(pinG), _pinB(pinB), _dir(dir) {
+    GRGB(const uint8_t dir = COMMON_CATHODE, const uint8_t pinR = 0, const uint8_t pinG = 0, const uint8_t pinB = 0, const uint8_t shift = 0) :
+    _dir(dir), _pinR(pinR), _pinG(pinG), _pinB(pinB), _shift(shift)  {
         // если пины указаны (не равны)
         if (!(_pinR == _pinG && _pinR == _pinB)) {
             pinMode(pinR, OUTPUT);
@@ -68,15 +74,11 @@ public:
     }
     
     // установить цвета r, g, b: 0-255
-    void setRGB(uint8_t r, uint8_t g, uint8_t b, uint8_t br = 255) {
+    void setRGB(uint8_t r, uint8_t g, uint8_t b, int br = -1) {
         _r = r;
         _g = g;
         _b = b;
-        if (br != 255) {
-            _fade8(_r);
-            _fade8(_g);
-            _fade8(_b);
-        }
+        _fade8local(br);
         show();
     }
     
@@ -127,7 +129,7 @@ public:
     }
     
     // цветовое колесо 0-1530
-    void setWheel(int color, uint8_t br = 255) {
+    void setWheel(int color, int br = -1) {
         if (color <= 255) {           			  // красный макс, зелёный растёт
             _r = 255;
             _g = color;
@@ -158,16 +160,12 @@ public:
             _g = 0;
             _b = 1530 - color;
         }
-        if (br != 255) {
-            _fade8(_r);
-            _fade8(_g);
-            _fade8(_b);
-        }
+        _fade8local(br);
         show();
     }
     
     // цветовое колесо 0-255
-    void setWheel8(uint8_t color, uint8_t br = 255) {
+    void setWheel8(uint8_t color, int br = -1) {
         uint8_t shift;
         if (color > 170) {
             shift = (color - 170) * 3;
@@ -185,16 +183,12 @@ public:
             _g = shift;
             _b = 0;
         }
-        if (br != 255) {
-            _fade8(_r);
-            _fade8(_g);
-            _fade8(_b);
-        }
+        _fade8local(br);
         show();
     }
     
     // цветовая температура 1000-40000К
-    void setKelvin(int kelvin, uint8_t br = 255) {
+    void setKelvin(int kelvin, int br = -1) {
         float tmpKelvin, tmpCalc;
         kelvin = constrain(kelvin, 1000, 40000);
         tmpKelvin = kelvin / 100;
@@ -232,16 +226,12 @@ public:
             tmpCalc = constrain(tmpCalc, 0, 255);
             _b = tmpCalc;
         }
-        if (br != 255) {
-            _fade8(_r);
-            _fade8(_g);
-            _fade8(_b);
-        }
+        _fade8local(br);
         show();
     }
     
     // цветовая температура 1000-10000К, быстрый алгоритм
-    void setKelvinFast(int K, uint8_t br = 255) {
+    void setKelvinFast(int K, int br = -1) {
         float r, g, b;
         if (K < 6700) {
             r = 255;
@@ -256,35 +246,27 @@ public:
         _r = r;
         _g = g;
         _b = b;
-        if (br != 255) {
-            _fade8(_r);
-            _fade8(_g);
-            _fade8(_b);
-        }
+        _fade8local(br);
         show();
     }
     
     // HEX цвет 24 бита
-    void setHEX(uint32_t color, uint8_t br = 255) {
+    void setHEX(uint32_t color, int br = -1) {
         // буфер цветов
         _r = ((uint32_t)color >> 16) & 0xFF;
         _g = ((uint32_t)color >> 8) & 0xFF;
         _b = (uint32_t)color & 0xFF;
-        if (br != 255) {
-            _fade8(_r);
-            _fade8(_g);
-            _fade8(_b);
-        }
+        _fade8local(br);
         show();
     }
     
     // HEX цвет 16 бит
-    void setHEX16(uint32_t color, uint8_t br = 255) {
+    void setHEX16(uint32_t color, int br = -1) {
         setHEX( ((color & 0xF800) << 8) | ((color & 0x7E0) << 5) | ((color & 0x1F) << 3), br); // rgb16->rgb24
     }
     
     // цвет из предустановленных RGBCOLORS
-    void setColor(uint32_t color, uint8_t br = 255) {
+    void setColor(uint32_t color, int br = -1) {
         setHEX16(color, br);
     }
     
@@ -314,9 +296,6 @@ public:
                 _bf = _b << 7;
             }
             show(true);     // показать цвета фейдера
-            /*Serial.print(_rf>>7) ;Serial.print(',');
-            Serial.print(_gf>>7); Serial.print(',');
-            Serial.println(_bf>>7);*/
         }
         return (_fade && _fadeFlag);
     }
@@ -338,7 +317,7 @@ public:
     
     // отключить коллбэк
     void detach() {
-        _handler = NULL;
+        _handler = nullptr;
     }
     
     // 8 бит сигналы для "виртуального" драйвера, обновляются после установки цвета
@@ -383,9 +362,9 @@ private:
         }
         
         // глобальная яркость
-        _fade8(r);
-        _fade8(g);
-        _fade8(b);
+        _fade8(r, _bri);
+        _fade8(g, _bri);
+        _fade8(b, _bri);
         
         // CRT
         if (_crt) {
@@ -396,9 +375,10 @@ private:
         
         // направление
         if (_dir) {
-            r = 255 - r;
-            g = 255 - g;
-            b = 255 - b;
+            int maxV = (256 << _shift) - 1;
+            r = maxV - r;
+            g = maxV - g;
+            b = maxV - b;
         }
         
         // для фронтенда
@@ -409,18 +389,26 @@ private:
         
         // если пины указаны, выводим
         if (!(_pinR == _pinG && _pinR == _pinB)) {
-            analogWrite(_pinR, r);
-            analogWrite(_pinG, g);
-            analogWrite(_pinB, b);
+            analogWrite(_pinR, r << _shift);
+            analogWrite(_pinG, g << _shift);
+            analogWrite(_pinB, b << _shift);
         }
     }
-    void _fade8(uint8_t& x) { x = ((uint16_t)x * (_bri + 1)) >> 8; }
+    void _fade8(uint8_t& x, uint8_t br) { x = ((uint16_t)x * (br + 1)) >> 8; }
     void _crtSq(uint8_t& x) { x = ((uint16_t)(x) * (x) + 255) >> 8; }
+    void _fade8local(int& br) {
+        if (br >= 0) {
+            _fade8(_r, br);
+            _fade8(_g, br);
+            _fade8(_b, br);
+        }
+    }
     
     const uint8_t _pinR, _pinG, _pinB, _dir;
     uint8_t _bri = 255;
     bool _crt = false, _fade = false;
     uint8_t _r, _g, _b;
+    const uint8_t _shift;
     
     uint16_t _rf = 0, _gf = 0, _bf = 0;
     uint32_t _tmr = 0, _fadeTime = 2000;
@@ -428,6 +416,6 @@ private:
     int16_t _stepR = 0, _stepG = 0, _stepB = 0;
     int16_t _steps;
     bool _fadeFlag = false;
-    void (*_handler)() = NULL;
+    void (*_handler)() = nullptr;
 };
 #endif

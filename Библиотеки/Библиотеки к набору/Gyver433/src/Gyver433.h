@@ -20,15 +20,14 @@
     v1.2 - улучшение качества связи, оптимизация работы в прерывании
     v1.3 - добавлен вывод RSSI
     v1.4 - переделан FastIO
+    v1.4.1 - убран FastIO, CRC вынесен отдельно
 */
 
 #ifndef Gyver433_h
 #define Gyver433_h
 #include <Arduino.h>
-#include "FastIO_v2.h"
+#include "G433_crc.h"
 
-uint8_t G433_crc8(uint8_t *buffer, uint8_t size);       // ручной CRC8
-uint8_t G433_crc_xor(uint8_t *buffer, uint8_t size);    // ручной CRC XOR
 #define TRAINING_TIME_SLOW (500000ul)                   // время синхронизации для SLOW_MODE
 
 // =========================================================================
@@ -76,9 +75,6 @@ uint8_t G433_crc_xor(uint8_t *buffer, uint8_t size);    // ручной CRC XOR
 #define TRAINING_PULSES 50
 #endif
 
-// crc8 один байт
-void G433_crc8_byte(uint8_t &crc, uint8_t data);
-
 // ============ ПЕРЕДАТЧИК ============
 template <uint8_t TX_PIN, uint16_t TX_BUF = 64, uint8_t CRC_MODE = G433_CRC8>
 class Gyver433_TX {
@@ -108,28 +104,28 @@ public:
     // отправка сырого набора байтов
     void write(uint8_t* buf, uint16_t size) {
         for (uint16_t i = 0; i < TRAINING_PULSES; i++) {
-            F_fastWrite(TX_PIN, 1);
+            fastWrite(TX_PIN, 1);
             G433_DELAY(FRAME_TIME);
-            F_fastWrite(TX_PIN, 0);
+            fastWrite(TX_PIN, 0);
             G433_DELAY(FRAME_TIME);
         }
-        F_fastWrite(TX_PIN, 1);       // старт
+        fastWrite(TX_PIN, 1);       // старт
         G433_DELAY(START_PULSE);    // ждём
-        F_fastWrite(TX_PIN, 0);       // старт бит
+        fastWrite(TX_PIN, 0);       // старт бит
         
         #ifdef G433_MANCHESTER
         G433_DELAY(HALF_FRAME);       // ждём
         for (uint16_t n = 0; n < size; n++) {
             uint8_t data = buf[n];
             for (uint8_t b = 0; b < 8; b++) {
-                F_fastWrite(TX_PIN, !(data & 1));
+                fastWrite(TX_PIN, !(data & 1));
                 G433_DELAY(HALF_FRAME);
-                F_fastWrite(TX_PIN, (data & 1));                
+                fastWrite(TX_PIN, (data & 1));                
                 G433_DELAY(HALF_FRAME);
                 data >>= 1;
             }
         }
-        F_fastWrite(TX_PIN, 0);   // конец передачи
+        fastWrite(TX_PIN, 0);   // конец передачи
         #else
         bool flag = 0;
         for (uint16_t n = 0; n < size; n++) {
@@ -137,7 +133,7 @@ public:
             for (uint8_t b = 0; b < 8; b++) {
                 if (data & 1) G433_DELAY(FRAME_TIME);
                 else G433_DELAY(HALF_FRAME);
-                F_fastWrite(TX_PIN, flag = !flag);
+                fastWrite(TX_PIN, flag = !flag);
                 data >>= 1;
             }
         }
@@ -147,7 +143,18 @@ public:
     // доступ к буферу
     uint8_t buffer[TX_BUF + !!CRC_MODE];
     
-private:    
+private:
+    void fastWrite(const uint8_t pin, bool val) {
+#if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__)
+        if (pin < 8) bitWrite(PORTD, pin, val);
+        else if (pin < 14) bitWrite(PORTB, (pin - 8), val);
+        else if (pin < 20) bitWrite(PORTC, (pin - 14), val);
+#elif defined(__AVR_ATtiny85__) || defined(__AVR_ATtiny13__)
+        bitWrite(PORTB, pin, val);
+#else
+        digitalWrite(pin, val);
+#endif
+    }
 };
 
 // ============ ПРИЁМНИК ============
@@ -231,8 +238,21 @@ public:
     uint8_t buffer[RX_BUF + !!CRC_MODE];
     
 private:
+    bool fastRead(const uint8_t pin) {
+#if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__)
+        if (pin < 8) return bitRead(PIND, pin);
+        else if (pin < 14) return bitRead(PINB, pin - 8);
+        else if (pin < 20) return bitRead(PINC, pin - 14);
+#elif defined(__AVR_ATtiny85__) || defined(__AVR_ATtiny13__)
+        return bitRead(PINB, pin);
+#else
+        return digitalRead(pin);
+#endif
+        return 0;
+    }
+
     bool pinChanged() {
-        bit = F_fastRead(RX_PIN);
+        bit = fastRead(RX_PIN);
         if (bit != prevBit) {
             prevBit = bit;
             return 1;
@@ -292,44 +312,4 @@ private:
     uint8_t errCount = 0, rcCount = 0, RSSI = 0;
 };
 
-// ===== CRC =====
-void G433_crc8_byte(uint8_t &crc, uint8_t data) {
-#if defined (__AVR__)
-    // резкий алгоритм для AVR
-    uint8_t counter;
-    uint8_t buffer;
-    asm volatile (
-    "EOR %[crc_out], %[data_in] \n\t"
-    "LDI %[counter], 8          \n\t"
-    "LDI %[buffer], 0x8C        \n\t"
-    "_loop_start_%=:            \n\t"
-    "LSR %[crc_out]             \n\t"
-    "BRCC _loop_end_%=          \n\t"
-    "EOR %[crc_out], %[buffer]  \n\t"
-    "_loop_end_%=:              \n\t"
-    "DEC %[counter]             \n\t"
-    "BRNE _loop_start_%="
-    : [crc_out]"=r" (crc), [counter]"=d" (counter), [buffer]"=d" (buffer)
-    : [crc_in]"0" (crc), [data_in]"r" (data)
-    );
-#else
-    // обычный для всех остальных
-    uint8_t i = 8;
-    while (i--) {
-        crc = ((crc ^ data) & 1) ? (crc >> 1) ^ 0x8C : (crc >> 1);
-        data >>= 1;
-    }
-#endif
-}
-
-uint8_t G433_crc8(uint8_t *buffer, uint8_t size) {
-    uint8_t crc = 0;
-    for (uint8_t i = 0; i < size; i++) G433_crc8_byte(crc, buffer[i]);
-    return crc;
-}
-uint8_t G433_crc_xor(uint8_t *buffer, uint8_t size) {
-    uint8_t crc = 0;
-    for (uint8_t i = 0; i < size; i++) crc ^= buffer[i];
-    return crc;
-}
 #endif

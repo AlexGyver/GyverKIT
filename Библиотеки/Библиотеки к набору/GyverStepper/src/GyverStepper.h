@@ -38,6 +38,7 @@
     v1.13 - исправлены мелкие баги, оптимизация
     v1.14 - исправлены ошибки разгона и торможения в KEEP_SPEED
     v1.15 - оптимизация, исправлены мелкие баги, stop() больше не сбрасывает maxSpeed
+    v1.15.2 - добавил включение EN если указан, даже при отключенном autoPower
 */
 
 /*
@@ -275,7 +276,7 @@ public:
     void reverse(bool dir) 			{ _globDir = dir; }
 
     // инвертировать поведение EN пина
-    void invertEn(bool dir) 		{ _enDir = dir; }
+    void invertEn(bool dir)         { _enDir = dir; }
 
     // установка текущей позиции в шагах
     void setCurrent(long pos) 		{ _current = pos; _accelSpeed = 0; }
@@ -369,12 +370,6 @@ public:
         }
     }
     
-    // резкая остановка
-    void brake() {		
-        disable();
-        resetMotor();
-    }
-    
     // остановка и сброс позиции в 0
     void reset() {
         brake();
@@ -438,36 +433,37 @@ public:
         resetTimers();
         if (!_powerState) {
             _powerState = true;            
-            if (_autoPower) {
-                if (_TYPE == STEPPER_PINS) {
-                    // подадим прошлый сигнал на мотор, чтобы вал зафиксировался
-                    if (_DRV == STEPPER4WIRE || _DRV == STEPPER4WIRE_HALF) step();	
-                    if (_enPin != 255) digitalWrite(_enPin, _enDir);
-                } else if (*_power) _power(1);
-            }
+            if (_TYPE == STEPPER_PINS) {
+                // подадим прошлый сигнал на мотор, чтобы вал зафиксировался
+                if (_DRV == STEPPER4WIRE || _DRV == STEPPER4WIRE_HALF) step();	
+                if (_enPin != 255) digitalWrite(_enPin, _enDir);
+            } else if (*_power) _power(1);
         }
     }
     
     // выключить мотор
     void disable() {
+        if (_TYPE == STEPPER_PINS) {
+            if (_DRV == STEPPER4WIRE || _DRV == STEPPER4WIRE_HALF) {
+                setPin(0, 0);
+                setPin(1, 0);
+                setPin(2, 0);
+                setPin(3, 0);
+            }
+            if (_enPin != 255) digitalWrite(_enPin, !_enDir);
+        } else if (*_power) _power(0);
+    }
+    
+    // резкая остановка
+    void brake() {		
         _workState = false;
         _stopSpeed = 0;
         resetMotor();
         if (_powerState) {
             _powerState = false;
-            if (_autoPower) {
-                if (_TYPE == STEPPER_PINS) {
-                    if (_DRV == STEPPER4WIRE || _DRV == STEPPER4WIRE_HALF) {
-                        setPin(0, 0);
-                        setPin(1, 0);
-                        setPin(2, 0);
-                        setPin(3, 0);
-                    }
-                    if (_enPin != 255) digitalWrite(_enPin, !_enDir);
-                } else if (*_power) _power(0);
-            }
+            if (_autoPower) disable();
         }
-    }	
+    }    
     
     // получить минимальный период, с которым нужно вызывать tick при заданной макс. скорости
     uint32_t getMinPeriod() {
@@ -703,8 +699,8 @@ private:
 
     GS_runMode _curMode = FOLLOW_POS;
     
-    void (*_step)(uint8_t a) = NULL;
-    void (*_power)(bool a) = NULL;
+    void (*_step)(uint8_t a) = nullptr;
+    void (*_power)(bool a) = nullptr;
 
 #ifdef __AVR__
     volatile uint8_t *_port_reg[_PINS_AMOUNT];
