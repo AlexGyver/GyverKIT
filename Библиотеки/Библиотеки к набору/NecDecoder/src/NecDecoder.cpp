@@ -1,97 +1,89 @@
 #include "NecDecoder.h"
-#define _inRange(a,from,to) (a >= from and a <= to ? true : false) // Возвращает true если 'a' лежит в пределах от from до to
-
 /*
-    NEC пакет: (32 бита)
-    | [START] | LSB <- [8 бит адрес] <- MSB | LSB <- [8 бит ~адрес] <- MSB | LSB <- [8 бит команда] <- MSB | LSB <- [8 бит ~команда] <- MSB |
+    NEC пакет: 32 бита, 4 блока по 8 бит, LSB<-MSB
+    [START] [адрес] [~адрес] [команда] [~команда]
 */
 
 void NecDecoder::tick(void) {
-  uint32_t period = micros() - _last_edge;                    										// Получаем время последнего импульса
-  _last_edge = micros();                              		  										// Обновляем таймер
-
-  if (_inRange(period, _NEC_LOW_BIT - _NEC_TOLERANCE, _NEC_LOW_BIT + _NEC_TOLERANCE)) {  			// (1125 +- _NEC_TOLERANCE) - '0' Бит
-    _temp_buffer = _temp_buffer << 1;                                           					// Сдвиг на 1 влево (ничего не прибавляем)
-    if (--_remain_counter < 1) {                                                					// Если все 32 бита из предыдущего пакета приняли
-#if (NEC_FLOW_CONTROL == true)																		// Если вкючен контроль четности потока
-	  if(_parity_control) return;																	// Четность не совпала - пакет битый
-#endif
-      _packet_buffer = _temp_buffer;                                          						// Перемещаем пакет из составного буфера в основной
-	  if(_decode_handler) _decode_handler();														// Если был подключен обработчик - вызвать его
-	  else _decoded_flag  = true;                                                  					// Иначе устанавливаем флаг успешного приема пакета      
+    uint32_t time = micros() - _tmr;                // получаем время последнего импульса
+    _tmr += time;                                   // сбрасываем таймер (== (_tmr = micros() ))
+    if (time > 150000) _repeats = -1;               // таймаут повторов
+    if (_start && time < _NEC_HIGH_MAX) {           // чтение: дата
+        uint8_t mode = 2;
+        if (time > _NEC_LOW_MIN && time < _NEC_LOW_MAX) mode = 0;           // LOW бит
+        else if (time > _NEC_HIGH_MIN && time < _NEC_HIGH_MAX) mode = 1;    // HIGH бит
+        if (mode != 2) {                            // HIGH или LOW
+            _buffer = _buffer << 1 | mode;          // пишем в буфер
+            if (mode) _parity = !_parity;           // чётность
+            if (++_counter == 32) {                 // если приняли 32 бита
+                if (_parity) return;                // чётность не совпала - пакет битый
+                if (((_buffer >> 8) & _buffer) & 0xFF00FF) return;  // пакет битый
+                _packet = _buffer;                  // перемещаем пакет из буфера в дату
+                _decoded = true;                    // флаг успешного приема пакета
+                _repeats = 0;                       // обнуляем счётчик повторов
+                _start = false;                     // чтение окончено
+                return;
+            }
+        }
     }
-  } else if (_inRange(period, _NEC_HIGH_BIT - _NEC_TOLERANCE, _NEC_HIGH_BIT + _NEC_TOLERANCE)) {	// (2250 +- _NEC_TOLERANCE) - '1' Бит 
-#if (NEC_FLOW_CONTROL == true)																		// Если вкючен контроль четности потока
-	_parity_control = !_parity_control;
-#endif
-    _temp_buffer = _temp_buffer << 1 | 1;                                      				    	// Сдвиг на 1 влево (прибавляем 1)
-    if (--_remain_counter < 1) {                                               						// Если все 32 бита из предыдущего пакета приняли
-#if (NEC_FLOW_CONTROL == true)																		// Если вкючен контроль четности потока
-	  if(_parity_control) return;																	// Четность не совпала - пакет битый
-#endif
-      _packet_buffer = _temp_buffer;                                          						// Перемещаем пакет из составного буфера в основной
-      if(_decode_handler) _decode_handler();														// Если был подключен обработчик - вызвать его;
-	  else _decoded_flag  = true;                                                  					// Иначе устанавливаем флаг успешного приема пакета  
+    if (_repeats != -1 && time > _NEC_REPEAT_MIN && time < _NEC_REPEAT_MAX) {   // чтение: повтор
+        if (_repeats > _NEC_SKIP_REPEAT) _repeat = true;
+        else _repeats++;
+    } else if (time > _NEC_START_MIN && time < _NEC_START_MAX) {    // чтение: начало пакета
+        _buffer = _parity = _counter = 0;                           // сбрасываем всё
+        _start = true;
     }
-  } else if (_inRange(period, _NEC_REPEAT - _NEC_TOLERANCE, _NEC_REPEAT + _NEC_TOLERANCE)) {    	// (11250 +- _NEC_TOLERANCE) - Повтор
-    if(_repeat_handler)	_repeat_handler();															// Если был подключен обработчик повтора - вызвать его
-    _repeat_flag = true;                                                          					// Иначе устанавливаем флаг повтора
-  } else if (_inRange(period, _NEC_START_BIT - _NEC_TOLERANCE, _NEC_START_BIT + _NEC_TOLERANCE)) {  // (13500 +- _NEC_TOLERANCE) - Начало пакета
-    _temp_buffer =  0;                                                            					// Очищаем составной буфер
-	_parity_control = 0;
-    _remain_counter = 32;                                                         					// Сбрасываем счетчик
-  }
 }
 
-void NecDecoder::attachDecode(void (*handler)(void)) {
-  _decode_handler = handler;
+bool NecDecoder::available() {
+    if (_decoded || _repeat) {
+        _decoded = _repeat = false;
+        return true;
+    } return false;
 }
 
-void NecDecoder::attachRepeat(void (*handler)(void)) {
-  _repeat_handler = handler;
+bool NecDecoder::isDecoded() {
+    if (_decoded) {
+        _decoded = false;
+        return true;
+    } return false;
 }
 
-bool NecDecoder::isDecoded(void) {    // Возвращает true если очередной пакет декодирован
-  bool temp = _decoded_flag;     	  // Сохраняем состояние флага
-  _decoded_flag = false;       		  // Принудительно очищаем флаг
-  return temp;            			  // Возвращаем предыдущее состояннеи флага
+bool NecDecoder::isRepeated() {
+    if (_repeat) {
+        _repeat = false;
+        return true;
+    } return false;
 }
 
-bool NecDecoder::isRepeated(void) {   // Возвращает true если принята команда повтора
-  bool temp = _repeat_flag;     	  // Сохраняем состояние флага
-  _repeat_flag = false;       		  // Принудительно очищаем флаг
-  return temp;            		      // Возвращаем предыдущее состояннеи флага
+uint32_t NecDecoder::readPacket() {
+    return _packet;
 }
 
-uint32_t NecDecoder::readPacket(void) {         // Возвращает принятый пакет целиком
-  return _packet_buffer;
+uint8_t NecDecoder::readAddress() {
+    return ((uint32_t)_packet >> 24);
 }
 
-uint8_t NecDecoder::readAddress(void) {         // Прочитать только байт с адресом
-  return (uint32_t)(_packet_buffer >> 24);      // Вернуть адрес [Биты 31:24]
+uint8_t NecDecoder::readCommand() {
+    return ((uint32_t)_packet >> 8 & 0xFF);
 }
 
-uint8_t NecDecoder::readInvAddress(void) {        // Прочитать только байт с инвертированным адресом
-  return (uint32_t)(_packet_buffer >> 16 & 0xFF); // Вернуть ~адрес [Биты 23:16]
+uint8_t NecDecoder::readInvCommand() {
+    return ((uint32_t)_packet & 0xFF);
 }
 
-uint8_t NecDecoder::readCommand(void) {           // Прочитать только байт с командой
-  return (uint32_t)(_packet_buffer >> 8 & 0xFF);  // Вернуть команду [Биты 15:8]
+uint8_t NecDecoder::readInvAddress() {
+    return ((uint32_t)_packet >> 16 & 0xFF);
 }
 
-uint8_t NecDecoder::readInvCommand(void) {        // Прочитать только байт с инвертированной командой
-  return (uint32_t)(_packet_buffer & 0xFF);       // Вернуть ~команду [Биты 7:0]
+bool NecDecoder::addressIsValid() {
+    return true;
 }
 
-bool NecDecoder::addressIsValid(void) {           // Вернет true если адрес прошел проверку
-  return !(readAddress() & readInvAddress());     // Наложение инвертированной битовой маски вернет 0 при совпадении (инвертируем результат)
+bool NecDecoder::commandIsValid() {
+    return true;
 }
 
-bool NecDecoder::commandIsValid(void) {           // Вернет true если коанда прошла проверку
-  return !(readCommand() & readInvCommand());     // Наложение инвертированной битовой маски вернет 0 при совпадении (инвертируем результат)
+bool NecDecoder::packetIsValid() {
+    return true;
 }
-
-bool NecDecoder::packetIsValid(void) {            // Вернет true если весь пакет прошел проверку
-  return addressIsValid() & commandIsValid();     // Вернет true только если обе функции вернут true
-}
-

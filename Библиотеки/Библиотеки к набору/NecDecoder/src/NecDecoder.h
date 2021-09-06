@@ -3,77 +3,73 @@
     Документация:
     GitHub: https://github.com/GyverLibs/NecDecoder
     Возможности:
-    - Требует вызова специального метода при отрицательном (FALLING) фронте на пине ИК приемника
-    - Отсчет времени базируется на micros()
-    - Хранение ОДНОГО последнего декодированного пакета данных в буфере
-    - Обработка команды повтора (удержания кнопки пульта)
-    - Возможность подключить обработчики декодированного пакета и команды повтора без необходимости отслеживать флаги
-	- Контроль целостности (четности) пакета 'на лету' (по умолчанию включен)
-    Nich1con for AlexGyver, alex@alexgyver.ru
+    - Библиотека не забирает никакие прерывания
+    - Отсчет времени на micros()
+    - Обработка команды повтора (удержание кнопки пульта)
+    - Обработка и чтение занимает 500б Flash
+    by Nich1con & AlexGyver, alex@alexgyver.ru
     https://alexgyver.ru/
     MIT License
 
     Версии:
     v1.0 - релиз
-	v1.1 - исправлены ошибки, добавлена возможность подключения обработчиков, добавлен контроль потока 
+    v1.1 - исправлены ошибки, добавлена возможность подключения обработчиков, добавлен контроль потока 
+    v2.0 - завёз очень много оптимизации, стабильноси, надёжности, упрощения и удобства (by AlexGyver)
 */
 
-#ifndef NecDecoder_h
-#define NecDecoder_h
+#ifndef _NecDecoder_h
+#define _NecDecoder_h
 #include <Arduino.h>
 
-/*
-   Контроль потока (четности) - по умолчанию включен
-*/
-#ifndef NEC_FLOW_CONTROL 		
-#define NEC_FLOW_CONTROL true
-#endif 
+#define _NEC_TOLERANCE 150      // допуск high/low, мкс
+#define _NEC_TOLERANCE2 1500    // допуск start/repeat, мкс
+#define _NEC_SKIP_REPEAT 2      // пропуск первых повторов, шт
 
-/*
-   Допуск таймингов протокола в микросекундах (10-250)
-   Чем ниже допуск, тем строже тайминги сравниваются с эталонами
-   Чем ниже допуск, тем выше вероятность потерять пакет
-   При этом помехостойкость и вероятность поймать мусор ниже
-*/
-#define _NEC_TOLERANCE 128		
-
-/*
-   Тайминги протокола NEC в микросекундах 
-*/
+// Тайминги NEC, мкс
 #define _NEC_HIGH_BIT 	2250
-#define _NEC_LOW_BIT	1125
-#define _NEC_START_BIT  13500
-#define _NEC_REPEAT		11250
+#define _NEC_LOW_BIT	1150
+#define _NEC_START_BIT  14400
+#define _NEC_REPEAT		12300
+
+// =========================================================================
+#define _NEC_HIGH_MIN (_NEC_HIGH_BIT - _NEC_TOLERANCE)
+#define _NEC_HIGH_MAX (_NEC_HIGH_BIT + _NEC_TOLERANCE)
+#define _NEC_LOW_MIN (_NEC_LOW_BIT - _NEC_TOLERANCE)
+#define _NEC_LOW_MAX (_NEC_LOW_BIT + _NEC_TOLERANCE)
+
+#define _NEC_START_MIN (_NEC_START_BIT - _NEC_TOLERANCE2)
+#define _NEC_START_MAX (_NEC_START_BIT + _NEC_TOLERANCE2)
+#define _NEC_REPEAT_MIN (_NEC_REPEAT - _NEC_TOLERANCE2)
+#define _NEC_REPEAT_MAX (_NEC_REPEAT + _NEC_TOLERANCE2)
 
 class NecDecoder {
 public:
-    void tick();							  	// Вызывается при ОТРИЦАТЕЛЬНОМ (FALLING) фронте на пине ИК приемника, например в прерывании
-	void attachDecode(void (*handler)(void)); 	// 'Подключить' обработчик, вызываемый при декодировании очередного пакета (не обязательно)
-	void attachRepeat(void (*handler)(void));	// 'Подключить' обработчик, вызываемый при получении команды повтора (не обязательно)
-    bool isDecoded();						  	// Возвращает true когда очередной пакет декодирован
-    bool isRepeated();						  	// Возвращает true если принят флаг повтора команды
-    uint32_t readPacket();					  	// Прочитать весь пакет целиком (адрес + ~адрес + команда + ~команда)
-    uint8_t readAddress();					  	// Прочитать только байт с адресом
-    uint8_t readInvAddress();				  	// Прочитать только байт с инвертированным адресом
-    uint8_t readCommand();					  	// Прочитать только байт с командой
-    uint8_t readInvCommand();				  	// Прочитать только байт с инвертированной командой
-    bool addressIsValid();					  	// Вернет true если адрес прошел проверку
-    bool commandIsValid();					  	// Вернет true если команда прошла проверку
-    bool packetIsValid();					  	// Вернет true если весь пакет прошел проверку
+    void tick();                        // Вызывать при ОТРИЦАТЕЛЬНОМ (FALLING) фронте на пине ИК приемника в прерывании
+    bool available();                   // Возвращает true, если корректный пакет прочитан или повторён (isDecoded() + isRepeated())
+    uint32_t readPacket();              // Прочитать пакет целиком (адрес + ~адрес + команда + ~команда)
+    uint8_t readAddress();              // Прочитать адрес
+    uint8_t readCommand();              // Прочитать команду
+    bool isDecoded();                   // Возвращает true, если пакет успешно декодирован
+    bool isRepeated();                  // Возвращает true, если принят флаг повтора команды
+    
+    // сервис
+    uint8_t readInvAddress();			// Прочитать только байт с инвертированным адресом
+    uint8_t readInvCommand();			// Прочитать только байт с инвертированной командой
+    
+    // совместимость 1.x
+    bool addressIsValid();				// Вернет true если адрес прошел проверку
+    bool commandIsValid();				// Вернет true если команда прошла проверку
+    bool packetIsValid();				// Вернет true если весь пакет прошел проверку
     
 private:
-    void (*_decode_handler)(void) = nullptr;    // Указатель на функцию обработчик (изначально ни на что не указывает)
-	void (*_repeat_handler)(void) = nullptr;    // Указатель на функцию обработчик (изначально ни на что не указывает)
-    volatile uint32_t _packet_buffer = 0;	    // Буфер последнего принятого пакета (4 байта)
-    volatile uint32_t _temp_buffer = 0;			// Буфер текущего принимаемого пакета (4 байта)
-    volatile uint32_t _last_edge = 0;			// Время предыдущего нисходящего фронта (us)
-    volatile int8_t _remain_counter = 32;		// Счетчик бит в принимаемом пакете
-    volatile bool _decoded_flag = false;		// Флаг готовности данных к чтению (пакет принят и декодирован)
-    volatile bool _repeat_flag = false;			// Флаг повтора (пульт отправил то же самое, что и в прошлый раз)
-	
-#if (NEC_FLOW_CONTROL == true)
-    bool _parity_control = 0;					// Флаг контроля четности
-#endif
-	
+    volatile uint32_t _packet = 0;	    // Буфер последнего принятого пакета (4 байта)
+    volatile uint32_t _buffer = 0;		// Буфер текущего принимаемого пакета (4 байта)
+    volatile uint32_t _tmr = 0;			// Время предыдущего нисходящего фронта (us)
+    volatile int8_t _counter = 32;		// Счетчик бит в принимаемом пакете
+    volatile int8_t _repeats = 0;       // счётчик повторов
+    volatile bool _start = false;       // старт флаг
+    volatile bool _decoded = false;		// Флаг готовности данных к чтению (пакет принят и декодирован)
+    volatile bool _repeat = false;		// Флаг повтора (пульт отправил то же самое, что и в прошлый раз)
+    volatile bool _parity = false;		// Флаг контроля четности
 };
 #endif
