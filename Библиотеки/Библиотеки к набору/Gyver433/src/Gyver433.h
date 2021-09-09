@@ -3,12 +3,11 @@
     Документация: 
     GitHub: https://github.com/GyverLibs/Gyver433
     Возможности:
-    - Супер лёгкая либа, заведётся даже на тини13 (отправка)
     - Поддержка кривых китайских модулей
-    - Интерфейс Manchester или Pulselength
-    - Встроенный CRC контроль целостности (CRC8 или XOR)
+    - Встроенный CRC контроль целостности
     - Ускоренный алгоритм IO для AVR Arduino
-    - Опционально работа в прерывании (приём данных)
+    - Асинхронный приём в прерывании
+    - Супер лёгкая либа, заведётся даже на тини13
     
     AlexGyver, alex@alexgyver.ru
     https://alexgyver.ru/
@@ -21,14 +20,15 @@
     v1.3 - добавлен вывод RSSI
     v1.4 - переделан FastIO
     v1.4.1 - убран FastIO, CRC вынесен отдельно
+    v2.0 - убран буфер на отправку, убран манчестер, полностью переделан и оптимизирован интерфейс связи
 */
 
-#ifndef Gyver433_h
-#define Gyver433_h
+#ifndef _Gyver433_h
+#define _Gyver433_h
 #include <Arduino.h>
 #include "G433_crc.h"
 
-#define TRAINING_TIME_SLOW (500000ul)                   // время синхронизации для SLOW_MODE
+#define TRAINING_TIME_SLOW (500000)         // время синхронизации для SLOW_MODE
 
 // =========================================================================
 #ifndef G433_SPEED
@@ -36,27 +36,27 @@
 #endif
 
 #ifndef G433_RSSI_COUNT
-#define G433_RSSI_COUNT 10
+#define G433_RSSI_COUNT 8
 #endif
 
 // тайминги интерфейса
-#define FRAME_TIME (1000000ul / G433_SPEED) // время фрейма (либо HIGH)
-#define HALF_FRAME (FRAME_TIME / 2)         // полфрейма (либо LOW)
-#define START_PULSE (FRAME_TIME * 2)        // стартовый импульс
+#define G433_HIGH (1000000ul / G433_SPEED)  // время HIGH
+#define G433_LOW (G433_HIGH / 2)            // время LOW
+#define G433_START (G433_HIGH * 2)          // стартовый импульс
+#define G433_TRAIN (G433_HIGH * 3 / 2)      // синхроимпульс
 
-// окно времени для обработки импульса
-#define START_MIN (START_PULSE * 3 / 4)
-#define START_MAX (START_PULSE * 5 / 4)
-#define FRAME_MIN (FRAME_TIME * 3 / 4)
-#define FRAME_MAX (FRAME_TIME * 5 / 4)
-#define HALF_FRAME_MIN (HALF_FRAME * 3 / 4)
-#define HALF_FRAME_MAX (HALF_FRAME * 5 / 4)
+#define G433_WINDOW (G433_HIGH / 4)
+#define G433_EDGE_L (G433_LOW - G433_WINDOW)
+#define G433_EDGE_LH (G433_HIGH - G433_WINDOW)
+#define G433_EDGE_HT (G433_HIGH + G433_WINDOW)
+#define G433_EDGE_TS (G433_TRAIN + G433_WINDOW)
+#define G433_EDGE_S (G433_START + G433_WINDOW)
 
 // жоский delay для avr
 #ifdef AVR
-#define G433_DELAY _delay_us
+#define G433_DELAY(x) _delay_us(x)
 #else
-#define G433_DELAY delayMicroseconds
+#define G433_DELAY(x) delayMicroseconds(x)
 #endif
 
 // режимы CRC
@@ -66,17 +66,17 @@
 
 // количество синхроимпульсов
 #if defined(G433_FAST)
-#define TRAINING_PULSES 10
+#define TRAINING_TIME 10000
 #elif defined(G433_MEDIUM)
-#define TRAINING_PULSES 50
+#define TRAINING_TIME 100000
 #elif defined(G433_SLOW)
-#define TRAINING_PULSES (TRAINING_TIME_SLOW / FRAME_TIME / 2)
+#define TRAINING_TIME (TRAINING_TIME_SLOW)
 #else
-#define TRAINING_PULSES 50
+#define TRAINING_TIME 100000
 #endif
 
-// ============ ПЕРЕДАТЧИК ============
-template <uint8_t TX_PIN, uint16_t TX_BUF = 64, uint8_t CRC_MODE = G433_CRC8>
+// =================================== ПЕРЕДАТЧИК ===================================
+template <uint8_t TX_PIN, uint8_t CRC_MODE = G433_CRC8>
 class Gyver433_TX {
 public:
     Gyver433_TX() {
@@ -86,144 +86,173 @@ public:
     // отправка, блокирующая. Кушает любой тип данных
     template <typename T>
     bool sendData(T &data) {
-        if (sizeof(T) > TX_BUF) return 0;
-        const uint8_t *ptr = (const uint8_t*) &data;
-        for (uint16_t i = 0; i < sizeof(T); i++) buffer[i] = *ptr++;
-        if (CRC_MODE == G433_CRC8) {
-            buffer[sizeof(T)] = G433_crc8(buffer, sizeof(T));
-            write(buffer, sizeof(T) + 1);
-        } else if (CRC_MODE == G433_XOR) {
-            buffer[sizeof(T)] = G433_crc_xor(buffer, sizeof(T));
-            write(buffer, sizeof(T) + 1);
-        } else {
-            write(buffer, sizeof(T));
-        }
-        return 1;
+        uint8_t *ptr = (uint8_t*) &data;
+        write(ptr, sizeof(T));
     }
     
     // отправка сырого набора байтов
     void write(uint8_t* buf, uint16_t size) {
-        for (uint16_t i = 0; i < TRAINING_PULSES; i++) {
-            fastWrite(TX_PIN, 1);
-            G433_DELAY(FRAME_TIME);
-            fastWrite(TX_PIN, 0);
-            G433_DELAY(FRAME_TIME);
-        }
-        fastWrite(TX_PIN, 1);       // старт
-        G433_DELAY(START_PULSE);    // ждём
-        fastWrite(TX_PIN, 0);       // старт бит
+        uint8_t crc;
+        if (CRC_MODE == G433_CRC8) crc = G433_crc8(buf, size);
+        else if (CRC_MODE == G433_XOR) crc = G433_crc_xor(buf, size);
         
-        #ifdef G433_MANCHESTER
-        G433_DELAY(HALF_FRAME);       // ждём
-        for (uint16_t n = 0; n < size; n++) {
-            uint8_t data = buf[n];
-            for (uint8_t b = 0; b < 8; b++) {
-                fastWrite(TX_PIN, !(data & 1));
-                G433_DELAY(HALF_FRAME);
-                fastWrite(TX_PIN, (data & 1));                
-                G433_DELAY(HALF_FRAME);
-                data >>= 1;
-            }
+        // раскачка радио
+        flag = 0;
+        for (uint16_t i = 0; i < (TRAINING_TIME / G433_TRAIN / 2) * 2 + 1; i++) {
+            fastWrite(TX_PIN, flag = !flag);
+            G433_DELAY(G433_TRAIN);
         }
-        fastWrite(TX_PIN, 0);   // конец передачи
-        #else
-        bool flag = 0;
-        for (uint16_t n = 0; n < size; n++) {
-            uint8_t data = buf[n];
-            for (uint8_t b = 0; b < 8; b++) {
-                if (data & 1) G433_DELAY(FRAME_TIME);
-                else G433_DELAY(HALF_FRAME);
-                fastWrite(TX_PIN, flag = !flag);
-                data >>= 1;
-            }
+        
+        // старт бит
+        fastWrite(TX_PIN, 0);       // старт
+        G433_DELAY(G433_START);     // ждём
+        fastWrite(TX_PIN, 1);       // старт бит
+        
+        for (uint16_t i = 0; i < size; i++) write(buf[i]);  // дата
+        if (CRC_MODE) write(crc);               // CRC
+        G433_DELAY(G433_TRAIN);
+        fastWrite(TX_PIN, flag = !flag);        // стоп
+    }
+
+    // отправить байт (без старт бита!)
+    void write(uint8_t data) {
+        for (uint8_t b = 0; b < 8; b++) {
+            if (data & 1) G433_DELAY(G433_HIGH);
+            else G433_DELAY(G433_LOW);
+            fastWrite(TX_PIN, flag = !flag);
+            data >>= 1;
         }
-        #endif        
     }
     
-    // доступ к буферу
-    uint8_t buffer[TX_BUF + !!CRC_MODE];
-    
 private:
+    // быстрый IO
     void fastWrite(const uint8_t pin, bool val) {
-#if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__)
+    #if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__)
         if (pin < 8) bitWrite(PORTD, pin, val);
         else if (pin < 14) bitWrite(PORTB, (pin - 8), val);
         else if (pin < 20) bitWrite(PORTC, (pin - 14), val);
-#elif defined(__AVR_ATtiny85__) || defined(__AVR_ATtiny13__)
+    #elif defined(__AVR_ATtiny85__) || defined(__AVR_ATtiny13__)
         bitWrite(PORTB, pin, val);
-#else
+    #else
         digitalWrite(pin, val);
-#endif
+    #endif
     }
+    
+    bool flag = 0;
 };
 
-// ============ ПРИЁМНИК ============
+// =================================== ПРИЁМНИК ===================================
 template <uint8_t RX_PIN, uint16_t RX_BUF = 64, uint8_t CRC_MODE = G433_CRC8>
 class Gyver433_RX {
-public:
+public:   
     Gyver433_RX() {
         pinMode(RX_PIN, INPUT);
     }
     
-    // неблокирующий приём, вернёт кол-во успешно принятых байт
-    uint16_t tick() {            
-        if (pinChanged()) checkState();       
+    // неблокирующий приём. Вернёт количество успешно принятых байт
+    uint16_t tick() {
+        if (pinChanged()) tickISR();
         return gotData();
     }
     
-    // tick для вызова в прерывании по CHANGE
-    void tickISR() {
-        #ifdef G433_MANCHESTER
-        if (pinChanged()) checkState();        
-        #else
-        checkState();
-        #endif
-    }
-    
-    // блокирующий приём, вернёт кол-во успешно принятых байт
+    // блокирующий приём. Вернёт количество успешно принятых байт
     uint16_t tickWait() {
         do {
-            if (tick()) return size;
-        } while (parse == 2);
+            if (pinChanged()) tickISR();
+        } while (state == 1);
+        return gotData();
+    }
+        
+    // ручной приём в прерывании по CHANGE. Вернёт 1 (начало приёма), 2 (принят байт), 3 (конец пакета)
+    // принятый байт можно прочитать в byteBuf
+    uint8_t tickISRraw() {
+        uint32_t pulse = micros() - tmr;                    // время импульса
+        tmr += pulse;                                       // сброс таймера. Равносильно tmr = micros()
+        if (pulse <= G433_EDGE_L) return parse = 0;         // импульс слишком короткий
+        trains <<= 1;                                       // счётчик train импульсов (0b11111111 << 1)
+        if (pulse <= G433_EDGE_HT && parse) {               // окно LOW/HIGH и идёт парсинг
+            byteBuf >>= 1;                                  // двигаем байт-буфер
+            if (pulse > G433_EDGE_LH) byteBuf |= (1 << 7);  // пишем бит, если это HIGH
+            if (!(++bits & 0x7)) return 2;                  // 2: ПРИНЯТ БАЙТ: собрали байт (каждые 8 бит, 0x7 == 0b111)
+        } else if (pulse <= G433_EDGE_TS) {                 // окно START
+            trains |= 1;                                    // добавляем 1 справа к trains
+            if (parse) {                                    // был парсинг, а это стоп бит
+                parse = 0;                                  // стоп машина
+                return 3;                                   // 3: ПРИНЯТ ПАКЕТ: принят стоп-бит
+            }
+        } else if (pulse <= G433_EDGE_S) {                  // окно STOP/TRAINING
+            if (trains == 0xFE) {                           // было 7 train импульсов (0xFE == 0b11111110)
+                bits = 0;                                   // прерываем парсинг, если он был
+                parse = 1;                                  // старт бит, начинаем парсинг
+                return 1;                                   // 1: СТАРТ ПРИЁМА
+            }
+        } else return parse = 0;                            // слишком длинный импульс, выходим
         return 0;
     }
+    
+    // тикер приёма для вызова в прерывании по CHANGE
+    void tickISR() {
+        switch (tickISRraw()) {
+        case 1:                // СТАРТ БИТ
+            if (!state) {      // старта не было
+                state = 1;     // старт
+                bytes = 0;     // сброс
+            }                  // старт был - ошибка приёма
+            break;
+        case 2:                                 // ПРИНЯТ БАЙТ
+            if (state == 1) {                   // парсинг идёт
+                buffer[bytes] = byteBuf;        // пишем в буфер
+                bytes++;                        // счётчик принятых
+                if (bytes > sizeof(buffer)) {   // буфер переполнен
+                    state = 3;                  // флаг на чтение
+                }
+            }
+            break;
+        case 3:                           // КОНЕЦ ПАКЕТА
+            if (state == 1) state = 2;    // флаг на чтение
+            break;
+        }
+    }
+    
+    // если пакет прочитан успешно - вернёт количество байт в нём
+    uint16_t gotData() {
+        if (state >= 2) {                                   // флаг на чтение
+            size = 0;                                       // обнуляем размер
+            if (state != 3 && bytes != 0) {                 // если буфер не переполнен, проверяем CRC
+                if (CRC_MODE == G433_CRC8) {                // CRC8 
+                    if (!G433_crc8(buffer, bytes)) size = bytes - 1;
+                } else if (CRC_MODE == G433_XOR) {          // CRC XOR
+                    if (!G433_crc_xor(buffer, bytes)) size = bytes - 1;
+                } else size = bytes;                        // без CRC
+            }
+        #ifndef G433_CUT_RSSI
+            if (!size) errCount++;                          // принято 0 байт - ошибка
+            if (++rcCount >= G433_RSSI_COUNT) {
+                RSSI = 100 - errCount * 100 / G433_RSSI_COUNT;
+                errCount = rcCount = 0;
+            }
+        #endif
+            state = 0;
+            return size;            
+        }
+        return 0;
+    }    
     
     // прочитает буфер в любой тип данных
     template <typename T>
     bool readData(T &data) {
-        if (sizeof(T) > RX_BUF) return false;		
-        uint8_t *ptr = (uint8_t*) &data;	
+        if (sizeof(T) > RX_BUF) return false;   // великовато для буфера
+        if (sizeof(T) != size) return false;    // данные не соответствуют
+        uint8_t *ptr = (uint8_t*) &data;
         for (uint16_t i = 0; i < sizeof(T); i++) *ptr++ = buffer[i];
         return true;
     }
     
-    // вернёт true при получении корректных данных
-    uint16_t gotData() {
-        if (parse == 2 && millis() - tmr2 >= 10) {              // фрейм не закрыт
-            parse = size = 0;                                   // приём окончен   
-            if (byteCount > (1 + !!CRC_MODE)) {                 // если что то приняли
-                if (!bitCount) {                                // байт закрыт
-                    if (CRC_MODE == G433_CRC8) {                // CRC8 
-                        if (!G433_crc8(buffer, byteCount)) size = byteCount - 2;
-                    } else if (CRC_MODE == G433_XOR) {          // CRC XOR
-                        if (!G433_crc_xor(buffer, byteCount)) size = byteCount - 2;
-                    } else size = byteCount - 1;                // без CRC
-                }
-                // расчёт RSSI
-                if (!size) errCount++;
-                if (++rcCount >= G433_RSSI_COUNT) {
-                    RSSI = 100 - errCount * 100 / G433_RSSI_COUNT;
-                    errCount = rcCount = 0;
-                }
-            }
-            return size;
-        }
-        return 0;
-    }
-    
     // получить качество приёма (процент успешных передач)
     uint8_t getRSSI() {
+    #ifndef G433_CUT_RSSI
         return RSSI;
+    #endif
     }
     
     // получить размер принятых данных
@@ -236,80 +265,37 @@ public:
     
     // доступ к буферу
     uint8_t buffer[RX_BUF + !!CRC_MODE];
+    uint8_t byteBuf;
     
 private:
     bool fastRead(const uint8_t pin) {
-#if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__)
+    #if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__)
         if (pin < 8) return bitRead(PIND, pin);
         else if (pin < 14) return bitRead(PINB, pin - 8);
         else if (pin < 20) return bitRead(PINC, pin - 14);
-#elif defined(__AVR_ATtiny85__) || defined(__AVR_ATtiny13__)
+    #elif defined(__AVR_ATtiny85__) || defined(__AVR_ATtiny13__)
         return bitRead(PINB, pin);
-#else
+    #else
         return digitalRead(pin);
-#endif
+    #endif
         return 0;
     }
 
     bool pinChanged() {
-        bit = fastRead(RX_PIN);
-        if (bit != prevBit) {
-            prevBit = bit;
+        if (prevBit != fastRead(RX_PIN)) {
+            prevBit = !prevBit;
             return 1;
         } return 0;
     }
 
-    void checkState() {
-        uint32_t thisPulse = micros() - tmr;            // время импульса
-        if (parse == 1) {   			                // в прошлый раз поймали фронт
-            #ifdef G433_MANCHESTER
-            tmr += thisPulse;                           // сброс таймера приёма
-            #endif
-            if (thisPulse > START_MIN && thisPulse < START_MAX) {   // старт бит?
-                tmr2 = millis();                                    // сброс таймера активности
-                parse = 2;                                          // ключ на старт
-                byteCount = bitCount = size = 0;                    // сброс
-            } else parse = 0;									    // не старт бит
-        } else if (parse == 2) {		                            // идёт парсинг            
-            #ifdef G433_MANCHESTER
-            if (thisPulse > FRAME_MIN && thisPulse < FRAME_MAX) {   // фронт внутри таймфрейма
-                tmr += thisPulse;                                   // синхронизируем тайминги
-                tmr2 = millis();                                    // сброс таймера активности
-                buffer[byteCount] >>= 1;                            // двигаем байт
-                buffer[byteCount] |= (bit << 7);                    // пишем данные
-                bitCount++;                                         // счётчик битов                
-            }
-            #else
-            uint8_t state = 2;
-            if (thisPulse > HALF_FRAME_MIN && thisPulse < HALF_FRAME_MAX) state = 0; // low бит
-            else if (thisPulse > FRAME_MIN && thisPulse < FRAME_MAX) state = 1;      // high бит
-            if (state != 2) {                
-                buffer[byteCount] >>= 1;                            // двигаем байт
-                buffer[byteCount] |= (state << 7);                  // пишем данные
-                bitCount++;                                         // счётчик битов
-                tmr2 = millis();                                    // сброс таймера активности
-            }
-            #endif
-            if (bitCount == 8) {                        // собрали байт
-                bitCount = 0;                           // сброс
-                if (++byteCount >= RX_BUF) parse = 0;   // буфер переполнен                
-            }            
-        }
-        #ifdef G433_MANCHESTER
-        if (bit && parse == 0) {                        // ловим фронт
-            parse = 1;									// флаг на старт
-            tmr += thisPulse;                           // сброс таймера
-        }        
-        #else
-        if (parse == 0) parse = 1;                      // принудительно стартуем
-        tmr += thisPulse;                               // сброс таймера приёма
-        #endif
-    }
-    bool bit, prevBit;
-    uint8_t parse = 0;
-    uint32_t tmr = 0, tmr2 = 0;
-    uint8_t bitCount = 0, byteCount = 0;
-    uint8_t errCount = 0, rcCount = 0, RSSI = 0;
+    bool prevBit;
+    volatile uint8_t state = 0;
+    volatile uint8_t parse = 0, trains = 0;
+    volatile uint32_t tmr = 0;
+    uint8_t bits = 0, bytes = 0;
+#ifndef G433_CUT_RSSI
+    uint8_t errCount = 0, rcCount = 0, RSSI = 100;
+#endif
 };
 
 #endif

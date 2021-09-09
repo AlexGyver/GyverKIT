@@ -10,6 +10,7 @@
     Версии:
     v1.3 - исправлена ошибка при отриц. температуре
     v1.4 - разбил на h и cpp
+    v1.5 - добавлена поддержка BMP280
 */
 
 #ifndef GyverBME280_h
@@ -103,7 +104,6 @@ private:
         int16_t _H5;
         int8_t _H6;
     } CalibrationData;
-
 };
 
 float pressureToMmHg(float pressure);		// Convert [Pa] to [mm Hg]  

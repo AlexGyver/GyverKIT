@@ -46,23 +46,32 @@ void setTime(DateTime time);	// установить из структуры Dat
 void setTime(int8_t seconds, int8_t minutes, int8_t hours, int8_t date, int8_t month, int16_t year);	// установка времени
 void setHMSDMY(int8_t hours, int8_t minutes, int8_t seconds, int8_t date, int8_t month, int16_t year);	// установка времени тип 2
     
-DateTime getTime(void);			// получить в структуру DateTime
-uint8_t getSeconds(void);		// получить секунды
-uint8_t getMinutes(void);		// получить минуты
-uint8_t getHours(void);			// получить часы
-uint8_t getDay(void);			// получить день недели
-uint8_t getDate(void);			// получить число
-uint16_t getYear(void);			// получить год
-uint8_t getMonth(void);			// получить месяц
+// структура DateTime
+uint8_t second; 
+uint8_t minute;
+uint8_t hour;
+uint8_t day;
+uint8_t date;
+uint8_t month;
+uint16_t year;
+
+DateTime getTime();			// получить в структуру DateTime
+uint8_t getSeconds();		// получить секунды
+uint8_t getMinutes();		// получить минуты
+uint8_t getHours();			// получить часы
+uint8_t getDay();			// получить день недели
+uint8_t getDate();			// получить число
+uint16_t getYear();			// получить год
+uint8_t getMonth();			// получить месяц
     
 String getTimeString();			// получить время как строку вида HH:MM:SS
 String getDateString();			// получить дату как строку вида DD.MM.YYYY
 void getTimeChar(char* array);	// получить время как char array [8] вида HH:MM:SS
 void getDateChar(char* array);	// получить дату как char array [10] вида DD.MM.YYYY       
     
-bool lostPower(void);			// проверка на сброс питания
-float getTemperatureFloat(void);// получить температуру float
-int getTemperature(void);		// получить температуру int
+bool lostPower();			// проверка на сброс питания
+float getTemperatureFloat();// получить температуру float
+int getTemperature();		// получить температуру int
 ```
 
 <a id="example"></a>
@@ -76,19 +85,45 @@ MicroDS3231 rtc;
 void setup() {
   Serial.begin(9600);
   
-  if (rtc.lostPower()) {  //  при потере питания
-    rtc.setTime(COMPILE_TIME);  // установить время компиляции
+  // проверка наличия модуля на линии i2c
+  // вызов rtc.begin() не обязателен для работы
+  if (!rtc.begin()) {
+    Serial.println("DS3231 not found");
+    for(;;);
   }
-
-  //rtc.setTime(SEC, MIN, HOUR, DAY, MONTH, YEAR); // устанвока времени вручную
+  
+  // ======== УСТАНОВКА ВРЕМЕНИ АВТОМАТИЧЕСКИ ========
+  // rtc.setTime(COMPILE_TIME);     // установить время == времени компиляции
+  
+  // визуально громоздкий, но более "лёгкий" с точки зрения памяти способ установить время компиляции
+  rtc.setTime(BUILD_SEC, BUILD_MIN, BUILD_HOUR, BUILD_DAY, BUILD_MONTH, BUILD_YEAR);
+    
+  if (rtc.lostPower()) {            // выполнится при сбросе батарейки
+    Serial.println("lost power!");
+    // тут можно однократно установить время == времени компиляции
+  }
+  
+  // ======== УСТАНОВКА ВРЕМЕНИ ВРУЧНУЮ ========    
+  // установить время вручную можно двумя способами (подставить реальные числа)
+  //rtc.setTime(SEC, MIN, HOUR, DAY, MONTH, YEAR);
+  //rtc.setHMSDMY(HOUR, MIN, SEC, DAY, MONTH, YEAR);
+  
+  // также можно установить время через DateTime
+  /*
+  DateTime now;
+  now.second = 0;
+  now.minute = 10;
+  now.hour = 50;
+  now.date = 2;
+  now.month = 9;
+  now.year = 2021;
+  
+  rtc.setTime(now);  // загружаем в RTC
+  */
 }
 
 void loop() {
-  printTime();
-  delay(500);
-}
-
-void printTime() {
+  // получение и вывод каждой компоненты
   Serial.print(rtc.getHours());
   Serial.print(":");
   Serial.print(rtc.getMinutes());
@@ -103,21 +138,46 @@ void printTime() {
   Serial.print("/");
   Serial.println(rtc.getYear());
   
+  /*
+  // можно через DateTime (более оптимально):
+  DateTime now = rtc.getTime();
+  Serial.print(now.hour);
+  Serial.print(":");
+  Serial.print(now.minute);
+  Serial.print(":");
+  Serial.print(now.second);
+  Serial.print(" ");
+  Serial.print(now.day);
+  Serial.print(" ");
+  Serial.print(now.date);
+  Serial.print("/");
+  Serial.print(now.month);
+  Serial.print("/");
+  Serial.println(now.year);
+  */
+  
+  // вывод температуры чипа
   Serial.println(rtc.getTemperatureFloat());  
   //Serial.println(rtc.getTemperature());
+  
+  // вывод времени готовой строкой String
   Serial.println(rtc.getTimeString());
+  
+  // вывод даты готовой строкой String
   Serial.println(rtc.getDateString());
 
-  // работа с char
+  // вывод времени через char array
   char time[8];
-  rtc.getTimeChar(time);  // записать в массив time
+  rtc.getTimeChar(time);
   Serial.println(time);
   
+  // вывод даты через char array
   char date[10];
   rtc.getDateChar(date);
   Serial.println(date);
   
   Serial.println();
+  delay(500);
 }
 ```
 

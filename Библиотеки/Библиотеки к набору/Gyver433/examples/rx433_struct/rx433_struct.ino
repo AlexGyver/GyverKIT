@@ -1,12 +1,12 @@
 // приём структуры данных
 
-//#define G433_SPEED 1000   // скорость 100-8000 бит/с, по умолч. 2000 бит/с
+//#define G433_SPEED 1000   // скорость 100-10000 бит/с, по умолч. 2000 бит/с
 
 #include <Gyver433.h>
-Gyver433_RX<2, 10> rx;  // указали пин и размер буфера
+Gyver433_RX<2, 12> rx;  // указали пин и размер буфера
 
 // формат пакета для приёма (такой же как отправляется)
-struct dataPack {
+struct DataPack {
   byte counter;
   byte randomNum;
   int analog;
@@ -19,14 +19,16 @@ void setup() {
 
 void loop() {
   if (rx.tick()) {
-    dataPack data;     // "буферная" структура
-    rx.readData(data); // переписываем данные в неё
-
-    Serial.println("Received:");
-    Serial.println(data.counter);
-    Serial.println(data.randomNum);
-    Serial.println(data.analog);
-    Serial.println(data.time);
-    Serial.println();
+    DataPack data;            // "буферная" структура
+    if (rx.readData(data)) {  // переписываем данные в неё
+      // если данные подходят - выводим
+      Serial.println(data.counter);
+      Serial.println(data.randomNum);
+      Serial.println(data.analog);
+      Serial.println(data.time);
+      Serial.println();
+    } else {
+      Serial.println("Wrong data");
+    }
   }
 }
