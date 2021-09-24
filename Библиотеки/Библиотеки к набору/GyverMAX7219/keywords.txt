@@ -6,6 +6,7 @@
 #######################################
 # Datatypes (KEYWORD1)
 #######################################
+GyverMAX7219	KEYWORD1
 MAX7219	KEYWORD1
 
 
@@ -21,6 +22,11 @@ fillByte	KEYWORD2
 dot	KEYWORD2
 get	KEYWORD2
 update	KEYWORD2
+beginData	KEYWORD2
+endData	KEYWORD2
+sendByte	KEYWORD2
+clearDisplay	KEYWORD2
+setRotation	KEYWORD2
 
 #######################################
 # Constants (LITERAL1)

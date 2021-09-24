@@ -1,33 +1,65 @@
+// подключаем дисплей 32х16 (две сборки по 4 матрицы)
+// демо 6 эффектов, меняются каждые 5 секунд
+
 //#define MAX_SPI_SPEED 500000	// дефайн для изменения скорости SPI, по умолч 1000000
 #include <GyverMAX7219.h>
 
-#define AM_W 4*8  // 4 матрицы (32 точки)
-#define AM_H 2*8  // 2 матрицы (16 точек)
+#define AM_W 32  // 4 матрицы (32 точки)
+#define AM_H 16  // 2 матрицы (16 точек)
 
-// подключение к аппаратному SPI (Нано CLK 13, DAT 11)
-// указать количество МАТРИЦ по горизонтали и вертикали и CS пин
-MAX7219 < AM_W / 8, AM_H / 8, 5 > mtrx; // W, H, CS
-
-// подключение к любым пинам
-//MAX7219 < AM_W / 8, AM_H / 8, 5, 11, 13 > mtrx; // W, H, CS, DATA, CLK
+// дисплей 4х2, пин CS 5, остальные на аппаратный SPI
+MAX7219 < 4, 2, 5 > mtrx;
 
 void setup() {
+  mtrx.begin();
+  mtrx.println("Mtrx");
+  mtrx.print("Demo");
+  mtrx.update();
+  delay(3000);
 }
 
 void loop() {
-  //lines();
-  //ball();
-  //bezier();
-  //bezier2();
-  //bigBall();
-  net();
-
-  // переинициализация для больших матриц
-  static uint32_t tmr;
-  if (millis() - tmr >= 2000) {
-    tmr = millis();
-    mtrx.begin();
+  static uint32_t tmrM;
+  static byte mode;
+  if (millis() - tmrM >= 5000) {  // 5 секунд
+    tmrM = millis();
+    if (++mode >= 6) mode = 0;    // меняем режим от 0 до 5
+    mtrx.clear();
   }
+
+  switch (mode) {
+    case 0: lines(); break;
+    case 1: ball(); break;
+    case 2: bigBall(); break;
+    case 3: net(); break;
+    case 4: bezier(); break;
+    case 5: bitmap(); break;
+  }
+}
+
+// редактор тут http://jorydotcom.github.io/matrix-emoji/
+const uint8_t bmp[] PROGMEM = {
+  0b00100100,
+  0b00100100,
+  0b01111110,
+  0b11011011,
+  0b11111111,
+  0b11111111,
+  0b10100101,
+  0b00100100,
+};
+
+void bitmap() {
+  mtrx.clear();
+  static int x, y;
+  static int velX = 6, velY = 4;
+  x += velX;
+  y += velY;
+  if (x >= (AM_W - 8) * 10 || x < 0) velX = -velX;
+  if (y >= (AM_H - 8) * 10 || y < 0) velY = -velY;
+  mtrx.drawBitmap(x / 10, y / 10, bmp, 8, 8);
+  mtrx.update();
+  delay(30);
 }
 
 void net() {
@@ -60,52 +92,20 @@ void net() {
     }
   }
   mtrx.update();
-  delay(10);
+  delay(20);
 }
+
 int dist(int x1, int y1, int x2, int y2) {
   int lx = (x2 - x1);
   int ly = (y2 - y1);
   return (sqrt(lx * lx + ly * ly));
 }
 
-void bezier2() {
-  const byte amount = 3;
-  static bool start = false;
-  static int x[amount], y[amount];
-  static int velX[amount], velY[amount];
-  if (!start) {
-    start = 1;
-    for (byte i = 0; i < amount; i++) {
-      x[i] = random(10, (AM_W - 1) * 10);
-      y[i] = random(10, (AM_H - 1) * 10);
-      velX[i] = random(2, 9);
-      velY[i] = random(2, 9);
-    }
-  }
-  mtrx.clear();
-  byte bez[(amount + 1) * 2];
-  for (byte i = 0; i < amount; i++) {
-    x[i] += velX[i];
-    y[i] += velY[i];
-    if (x[i] >= (AM_W - 1) * 10 || x[i] < 0) velX[i] = -velX[i];
-    if (y[i] >= (AM_H - 1) * 10 || y[i] < 0) velY[i] = -velY[i];
-    mtrx.dot(x[i] / 10, y[i] / 10, 1);
-    bez[i * 2] = x[i] / 10;
-    bez[i * 2 + 1] = y[i] / 10;
-  }
-  bez[amount * 2] = bez[0];
-  bez[amount * 2 + 1] = bez[1];
-
-  mtrx.bezier(bez, amount + 1, 8);
-  mtrx.update();
-  delay(30);
-}
-
 void bigBall() {
   mtrx.clear();
   byte radius = 3;
   static int x = (AM_W / 2) * 10, y = (AM_H / 2) * 10;
-  static int velX = 17, velY = 9;
+  static int velX = 9, velY = 5;
   static bool fillFlag = 0;
   x += velX;
   y += velY;
@@ -120,7 +120,7 @@ void bigBall() {
 
   mtrx.circle(x / 10, y / 10, radius, fillFlag ? GFX_STROKE : GFX_FILL);
   mtrx.update();
-  delay(20);
+  delay(30);
 }
 
 void bezier() {
@@ -163,27 +163,23 @@ void lines() {
     mtrx.update();
     delay(30);
   }
-  for (int i = 0; i < AM_H; i += 3) {
-    mtrx.line(AM_W - 1, AM_H - 1, 0, i);
+  for (int i = AM_H; i >= 0; i -= 3) {
+    mtrx.line(AM_W - 1, 0, 0, i);
     mtrx.update();
     delay(30);
   }
   delay(100);
 }
 
-void ball() {
-  mtrx.clear();
+void ball() {  
   static int x, y;
-  static int velX = 17, velY = 9;
+  static int velX = 17, velY = 12;
   x += velX;
   y += velY;
   if (x >= (AM_W - 1) * 10 || x < 0) velX = -velX;
   if (y >= (AM_H - 1) * 10 || y < 0) velY = -velY;
 
-  mtrx.dot(x / 10, y / 10, 1);
-  mtrx.dot(x / 10 + 1, y / 10 + 1, 1);
-  mtrx.dot(x / 10 + 1, y / 10, 1);
-  mtrx.dot(x / 10, y / 10 + 1, 1);
+  mtrx.dot(x / 10, y / 10);
   mtrx.update();
-  delay(20);
+  delay(40);
 }

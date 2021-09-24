@@ -18,6 +18,7 @@
     v1.2 - переделан FastIO
     v1.2.1 - исправлен баг в SPI (с 1.2)
     v1.2.2 - убран FastIO
+    v1.3 - мелкие доработки и оптимизация, добавил поворот матриц
 */
 
 #ifndef GyverMAX7219_h
@@ -54,6 +55,7 @@ public:
         sendCMD(0x0a, 0x00);  // яркость
         sendCMD(0x0b, 0x0f);  // отображаем всё
         sendCMD(0x0C, 0x01);  // включить
+        clearDisplay();       // очистить
     }
     
     // установить яркость [0-15]
@@ -83,29 +85,15 @@ public:
     
     // установить точку
     void dot(int x, int y, uint8_t fill = 1) {
-        if (x >= 0 && x < width * 8 && y >= 0 && y < height * 8) {
-            if ((y >> 3) & 1) {               	// если это нечётная матрица: (y / 8) % 2
-                x = width * 8 - 1 - x;          // отзеркалить x
-                y = (y & 0xF8) + (7 - (y & 7)); // отзеркалить y: (y / 8) * 8 + (7 - (y % 8));
-            }
-            // позиция в буфере
-            int curByte = width * (height - 1 - (y >> 3)) + (width - 1 - (x >> 3)) + (y & 7) * width * height;
-            bitWrite(buffer[curByte], x & 7, fill);
-        }
+        int pos = getPosition(x, y);
+        if (pos >= 0) bitWrite(buffer[pos], _bx, fill);
     }
 
     // получить точку
     bool get(int x, int y) {
-        if (x >= 0 && x < width * 8 && y >= 0 && y < height * 8) {
-            if ((y >> 3) & 1) {               	// если это нечётная матрица: (y / 8) % 2
-                x = width * 8 - 1 - x;          // отзеркалить x
-                y = (y & 0xF8) + (7 - (y & 7)); // отзеркалить y: (y / 8) * 8 + (7 - (y % 8));
-            }
-            // позиция в буфере
-            int curByte = width * (height - 1 - (y >> 3)) + (width - 1 - (x >> 3)) + (y & 7) * width * height;
-            return bitRead(buffer[curByte], x & 7);
-        }
-        return 0;
+        int pos = getPosition(x, y);
+        if (pos >= 0) return bitRead(buffer[pos], _bx);
+        else return 0;
     }
 
     // обновить
@@ -115,12 +103,72 @@ public:
             beginData();
             for (int i = 0; i < _amount; i++) sendData(8 - k, buffer[count++]);
             endData();
-        }      
+        }
+    }
+    
+    // начать отправку
+    void beginData() {
+        if (DATpin == CLKpin) SPI.beginTransaction(MAX_SPI_SETT);
+        fastWrite(CSpin, 0);		
+    }
+    
+    // закончить отправку
+    void endData() {		
+        fastWrite(CSpin, 1);
+        if (DATpin == CLKpin) SPI.endTransaction();
+    }
+    
+    // отправка данных напрямую в матрицу (строка, байт)
+    void sendByte(uint8_t address, uint8_t value) {
+        beginData();
+        sendData(address + 1, value);
+        endData();
+    }
+    
+    // очистить дисплей (не буфер)
+    void clearDisplay() {
+        for (int k = 0; k < 8; k++) {
+            beginData();
+            for (int i = 0; i < _amount; i++) sendData(8 - k, 0);
+            endData();
+        }
+    }
+    
+    // поворот матриц (0, 1, 2, 3 на 90 град по часовой стрелке)
+    void setRotation(uint8_t rot) {
+        _rot = rot;
     }
 
     uint8_t buffer[width * height * 8];
 
 private:
+    int getPosition(int x, int y) {
+        if (x >= 0 && x < width * 8 && y >= 0 && y < height * 8) {
+            int b = y;
+            switch (_rot) {
+            case 1:
+                y = (y & 0xF8) + (x & 7);
+                x = (x & 0xF8) + 7 - (b & 7);
+                break;
+            case 2:
+                x = (x & 0xF8) + 7 - (x & 7);   // (x / 8 + 1) * 8 - 1 - (x % 8)
+                y = (y & 0xF8) + 7 - (y & 7);   // (y / 8 + 1) * 8 - 1 - (y % 8)
+                break;
+            case 3:
+                y = (y & 0xF8) + 7 - (x & 7);
+                x = (x & 0xF8) + (b & 7);
+                break;
+            }
+            if ((y >> 3) & 1) {               	// если это нечётная матрица: (y / 8) % 2
+                x = width * 8 - 1 - x;          // отзеркалить x
+                y = (y & 0xF8) + (7 - (y & 7)); // отзеркалить y: (y / 8) * 8 + (7 - (y % 8));
+            }
+            _bx = x & 7;
+            return width * (height - 1 - (y >> 3)) + (width - 1 - (x >> 3)) + (y & 7) * width * height; // позиция в буфере
+        }
+        return -1;
+    }
+    
     void fastWrite(const uint8_t pin, bool val) {
 #if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__)
         if (pin < 8) bitWrite(PORTD, pin, val);
@@ -157,19 +205,6 @@ private:
 #endif
 
     }
-    void beginData() {
-        SPI.beginTransaction(MAX_SPI_SETT);
-        fastWrite(CSpin, 0);		
-    }
-    void endData() {		
-        fastWrite(CSpin, 1);
-        SPI.endTransaction();
-    }
-    void sendCMD(uint8_t address, uint8_t value) {
-        beginData();
-        for (int i = 0; i < _amount; i++) sendData(address, value);
-        endData();
-    }
     void sendData(uint8_t address, uint8_t value) {
         if (DATpin == CLKpin) {
             SPI.transfer(address);
@@ -179,8 +214,14 @@ private:
             F_fastShiftOut(DATpin, CLKpin, MSBFIRST, value);
         }		
     }
-
+    void sendCMD(uint8_t address, uint8_t value) {
+        beginData();
+        for (int i = 0; i < _amount; i++) sendData(address, value);
+        endData();
+    }
+    
     const int _amount = width * height;
     int _row = 0, _count = 0;
+    uint8_t _rot = 0, _bx = 0;
 };
 #endif

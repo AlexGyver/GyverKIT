@@ -20,6 +20,7 @@ Cамая резкая библиотека для матриц MAX7219 на д�
 
 <a id="install"></a>
 ## Установка
+- Для работы нужна [GyverGFX](https://github.com/GyverLibs/GyverGFX)
 - Библиотеку можно найти по названию **GyverMAX7219** и установить через менеджер библиотек в:
     - Arduino IDE
     - Arduino IDE v2
@@ -34,18 +35,19 @@ Cамая резкая библиотека для матриц MAX7219 на д�
 <a id="init"></a>
 ## Инициализация
 ```cpp
-// подключение к аппаратному SPI (Нано CLK 13, DAT 11)
-// указать количество МАТРИЦ по горизонтали и вертикали и CS пин
-MAX7219 < 4, 1, 5 > mtrx; // W, H, CS
+MAX7219 < W, H, CS > mtrx;            // подключение к аппаратному SPI
+// пример: UNO / Nano (CLK - D13, DI - D11, CS - любой пин)
 
-// подключение к любым пинам
-//MAX7219 < 4, 1, 5, 11, 13 > mtrx; // W, H, CS, DATA, CLK
+MAX7219 < W, H, CS, DATA, CLK > mtrx; // подключение к любым пинам
+// W и H - количество МАТРИЦ по горизонтали и вертикали
+// CS, DATA, CLK - номера пинов
 ```
 
 <a id="usage"></a>
 ## Использование
 ```cpp
 void begin();                   // запустить
+void setRotation(uint8_t rot);  // поворот матриц (0, 1, 2, 3 на 90 град по часовой стрелке)
 void setBright(byte value);     // установить яркость [0-15]
 void setPower(bool value);      // переключить питание
 void clear();                   // очистить
@@ -56,13 +58,13 @@ bool get(int x, int y);         // получить точку
 void update();                  // обновить
 
 // а также наследует всё из GyverGFX:
-void dot(int x, int y, uint8_t fill = 1);                           // точка
-void fastLineH(int y, int x0, int x1, uint8_t fill = 1);            // вертикальная линия
-void fastLineV(int x, int y0, int y1, uint8_t fill = 1);            // горизонтальная линия
-void line(int x0, int y0, int x1, int y1, uint8_t fill = 1);        // линия
-void rect(int x0, int y0, int x1, int y1, uint8_t fill = 1);        // прямоугольник
-void roundRect(int x0, int y0, int x1, int y1, uint8_t fill = 1);   // скруглённый прямоугольник
-void circle(int x, int y, int radius, uint8_t fill = 1);            // окружность
+void dot(int x, int y, uint8_t fill = 1);                           // точка, fill - GFX_CLEAR/GFX_FILL/GFX_STROKE
+void fastLineH(int y, int x0, int x1, uint8_t fill = 1);            // вертикальная линия, fill - GFX_CLEAR/GFX_FILL/GFX_STROKE
+void fastLineV(int x, int y0, int y1, uint8_t fill = 1);            // горизонтальная линия, fill - GFX_CLEAR/GFX_FILL/GFX_STROKE
+void line(int x0, int y0, int x1, int y1, uint8_t fill = 1);        // линия, fill - GFX_CLEAR/GFX_FILL/GFX_STROKE
+void rect(int x0, int y0, int x1, int y1, uint8_t fill = 1);        // прямоугольник, fill - GFX_CLEAR/GFX_FILL/GFX_STROKE
+void roundRect(int x0, int y0, int x1, int y1, uint8_t fill = 1);   // скруглённый прямоугольник, fill - GFX_CLEAR/GFX_FILL/GFX_STROKE
+void circle(int x, int y, int radius, uint8_t fill = 1);            // окружность, fill - GFX_CLEAR/GFX_FILL/GFX_STROKE
 void bezier(uint8_t* arr, uint8_t size, uint8_t dense, uint8_t fill = 1);   // кривая Безье
 void bezier16(int* arr, uint8_t size, uint8_t dense, uint8_t fill = 1);     // кривая Безье 16 бит. fill - GFX_CLEAR/GFX_FILL/GFX_STROKE
 void drawBitmap(int x, int y, const uint8_t *frame, int width, int height, uint8_t invert = 0, byte mode = 0);  // битмап
@@ -80,195 +82,42 @@ void textDisplayMode(bool mode);        // режим вывода текста 
 ## Пример
 Остальные примеры смотри в **examples**!
 ```cpp
-//#define MAX_SPI_SPEED 500000	// дефайн для изменения скорости SPI, по умолч 1000000
 #include <GyverMAX7219.h>
-
-#define AM_W 4*8  // 4 матрицы (32 точки)
-#define AM_H 2*8  // 2 матрицы (16 точек)
-
-// подключение к аппаратному SPI (Нано CLK 13, DAT 11)
-// указать количество МАТРИЦ по горизонтали и вертикали и CS пин
-MAX7219 < AM_W / 8, AM_H / 8, 5 > mtrx; // W, H, CS
-
-// подключение к любым пинам
-//MAX7219 < AM_W / 8, AM_H / 8, 5, 11, 13 > mtrx; // W, H, CS, DATA, CLK
+MAX7219 < 1, 1, 5 > mtrx;   // одна матрица (1х1), пин CS на D5
 
 void setup() {
+  mtrx.begin();       // запускаем
+  mtrx.setBright(5);  // яркость 0..15
+  //mtrx.rotate(1);   // можно повернуть 0..3, по 90 град по часовой стрелке
+
+  mtrx.dot(0, 0);     // пиксель на координатах 0,0
+  mtrx.update();      // показать
+  delay(1000);
+  mtrx.clear();
+
+  // линии крест накрест
+  mtrx.line(0, 0, 7, 7);  // (x0, y0, x1, y1)
+  mtrx.line(7, 0, 0, 7);
+  mtrx.update();
+  delay(1000);
+  mtrx.clear();
+
+  // круг
+  mtrx.circle(3, 3, 3, GFX_FILL); // х, у, радиус, заливка
+  mtrx.update();
+  delay(1000);
+  mtrx.clear();
+
+  // окружность
+  mtrx.circle(3, 3, 3, GFX_STROKE);
+  mtrx.update();
+  delay(1000);
+  mtrx.clear();
+
+  // остальную геометрию смотри в документации
 }
 
 void loop() {
-  // анимации на выбор
-  //lines();
-  //ball();
-  //bezier();
-  //bezier2();
-  //bigBall();
-  net();
-
-  // переинициализация для больших матриц
-  static uint32_t tmr;
-  if (millis() - tmr >= 2000) {
-    tmr = millis();
-    mtrx.begin();
-  }
-}
-
-void net() {
-  const byte radius = 2;
-  const byte amount = 5;
-  static bool start = false;
-  static int x[amount], y[amount];
-  static int velX[amount], velY[amount];
-  if (!start) {
-    start = 1;
-    for (byte i = 0; i < amount; i++) {
-      x[i] = random(10, (AM_W - 1) * 10);
-      y[i] = random(10, (AM_H - 1) * 10);
-      velX[i] = random(2, 9);
-      velY[i] = random(2, 9);
-    }
-  }
-  mtrx.clear();
-  for (byte i = 0; i < amount; i++) {
-    x[i] += velX[i];
-    y[i] += velY[i];
-    if (x[i] >= (AM_W - 1 - radius) * 10 || x[i] < radius * 10) velX[i] = -velX[i];
-    if (y[i] >= (AM_H - 1 - radius) * 10 || y[i] < radius * 10) velY[i] = -velY[i];
-    mtrx.circle(x[i] / 10, y[i] / 10, radius);
-  }
-
-  for (int i = 0; i < amount; i++) {
-    for (int j = 0; j < amount; j++) {
-      if (i != j && dist(x[i] / 10, y[i] / 10, x[j] / 10, y[j] / 10) < 35) mtrx.line(x[i] / 10, y[i] / 10, x[j] / 10, y[j] / 10);
-    }
-  }
-  mtrx.update();
-  delay(10);
-}
-int dist(int x1, int y1, int x2, int y2) {
-  int lx = (x2 - x1);
-  int ly = (y2 - y1);
-  return (sqrt(lx * lx + ly * ly));
-}
-
-void bezier2() {
-  const byte amount = 3;
-  static bool start = false;
-  static int x[amount], y[amount];
-  static int velX[amount], velY[amount];
-  if (!start) {
-    start = 1;
-    for (byte i = 0; i < amount; i++) {
-      x[i] = random(10, (AM_W - 1) * 10);
-      y[i] = random(10, (AM_H - 1) * 10);
-      velX[i] = random(2, 9);
-      velY[i] = random(2, 9);
-    }
-  }
-  mtrx.clear();
-  byte bez[(amount + 1) * 2];
-  for (byte i = 0; i < amount; i++) {
-    x[i] += velX[i];
-    y[i] += velY[i];
-    if (x[i] >= (AM_W - 1) * 10 || x[i] < 0) velX[i] = -velX[i];
-    if (y[i] >= (AM_H - 1) * 10 || y[i] < 0) velY[i] = -velY[i];
-    mtrx.dot(x[i] / 10, y[i] / 10, 1);
-    bez[i * 2] = x[i] / 10;
-    bez[i * 2 + 1] = y[i] / 10;
-  }
-  bez[amount * 2] = bez[0];
-  bez[amount * 2 + 1] = bez[1];
-
-  mtrx.bezier(bez, amount + 1, 8);
-  mtrx.update();
-  delay(30);
-}
-
-void bigBall() {
-  mtrx.clear();
-  byte radius = 3;
-  static int x = (AM_W / 2) * 10, y = (AM_H / 2) * 10;
-  static int velX = 17, velY = 9;
-  static bool fillFlag = 0;
-  x += velX;
-  y += velY;
-  if (x >= (AM_W - 4) * 10 || x < radius * 10) {
-    velX = -velX;
-    fillFlag = !fillFlag;
-  }
-  if (y >= (AM_H - 4) * 10 || y < radius * 10) {
-    velY = -velY;
-    fillFlag = !fillFlag;
-  }
-
-  mtrx.circle(x / 10, y / 10, radius, fillFlag ? GFX_STROKE : GFX_FILL);
-  mtrx.update();
-  delay(20);
-}
-
-void bezier() {
-  byte data[] = {0, 0, AM_W / 2, AM_H / 2, 0, AM_H - 1};
-  for (int i = 0; i < AM_W; i++) {
-    mtrx.clear();
-    data[0] = data[4] = AM_W - i;
-    data[2] = i;
-    mtrx.bezier(data, 3, 6);
-    mtrx.update();
-    delay(30);
-  }
-  for (int i = AM_W; i > 0; i--) {
-    mtrx.clear();
-    data[0] = data[4] = AM_W - i;
-    data[2] = i;
-    mtrx.bezier(data, 3, 6);
-    mtrx.update();
-    delay(30);
-  }
-}
-
-void lines() {
-  mtrx.clear();
-  for (byte i = 0; i < AM_W - 1; i += 3) {
-    mtrx.line(0, 0, i, AM_H);
-    mtrx.update();
-    delay(30);
-  }
-  for (int i = AM_H - 1; i >= 0 ; i -= 3) {
-    mtrx.line(0, 0, AM_W, i);
-    mtrx.update();
-    delay(30);
-  }
-  delay(100);
-
-  mtrx.clear();
-  for (int i = AM_W - 1; i > 0; i -= 3) {
-    mtrx.line(AM_W - 1, 0, i, AM_H);
-    mtrx.update();
-    delay(30);
-  }
-  for (int i = 0; i < AM_H; i += 3) {
-    mtrx.line(AM_W - 1, AM_H - 1, 0, i);
-    mtrx.update();
-    delay(30);
-  }
-  delay(100);
-}
-
-void ball() {
-  mtrx.clear();
-  static int x, y;
-  static int velX = 17, velY = 9;
-  x += velX;
-  y += velY;
-  if (x >= (AM_W - 1) * 10 || x < 0) velX = -velX;
-  if (y >= (AM_H - 1) * 10 || y < 0) velY = -velY;
-
-  mtrx.dot(x / 10, y / 10, 1);
-  mtrx.dot(x / 10 + 1, y / 10 + 1, 1);
-  mtrx.dot(x / 10 + 1, y / 10, 1);
-  mtrx.dot(x / 10, y / 10 + 1, 1);
-  mtrx.update();
-  delay(20);
 }
 ```
 
@@ -279,6 +128,7 @@ void ball() {
 - v1.2 - переделан FastIO
 - v1.2.1 - исправлен баг в SPI (с 1.2)
 - v1.2.2 - убран FastIO
+- v1.3 - мелкие доработки и оптимизация, добавил поворот матриц
 
 <a id="feedback"></a>
 ## Баги и обратная связь
