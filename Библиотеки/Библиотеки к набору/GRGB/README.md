@@ -60,6 +60,9 @@ GRGB led(COMMON_CATHODE);
 <a id="usage"></a>
 ## Использование
 ```cpp
+void enable();                                                  // вкл 
+void disable();                                                 // выкл
+void setPower(bool power);                                      // вкл/выкл
 void setRGB(uint8_t r, uint8_t g, uint8_t b, uint8_t br = 255); // установить цвета r, g, b: 0-255 + опционально яркость
 void setHSVfast(uint8_t h, uint8_t s, uint8_t v);               // быстрый HSV
 void setHSV(uint8_t h, uint8_t s, uint8_t v);                   // обычный HSV
@@ -163,6 +166,8 @@ void loop() {
 - v1.2.1 - исправлен баг
 - v1.3 - исправлена локальная яркость
 - v1.3.1 - исправлена инверсия для 10 бит
+- v1.4 - добавил enable(), disable() и setPower(bool)
+- v1.4.1 - совместимость Digispark
 
 <a id="feedback"></a>
 ## Баги и обратная связь

@@ -31,10 +31,17 @@
     v1.2.1 - исправлен баг
     v1.3 - исправлена локальная яркость
     v1.3.1 - исправлена инверсия для 10 бит
+    v1.4 - добавил enable(), disable() и setPower(bool)
+    v1.4.1 - совместимость Digispark
 */
 
 #ifndef _GRGB_h
 #define _GRGB_h
+#include <Arduino.h>
+
+#ifndef nullptr
+#define nullptr NULL
+#endif
 
 #define COMMON_CATHODE 0
 #define COMMON_ANODE 1
@@ -71,6 +78,27 @@ public:
             pinMode(pinG, OUTPUT);
             pinMode(pinB, OUTPUT);
         }
+    }
+    
+    // вкл
+    void enable() {
+        show();
+    }
+    
+    // выкл
+    void disable() {
+        if (!(_pinR == _pinG && _pinR == _pinB)) {
+            int val = _dir ? (256 << _shift) - 1 : 0;
+            analogWrite(_pinR, val);
+            analogWrite(_pinG, val);
+            analogWrite(_pinB, val);
+        }
+    }
+    
+    // вкл/выкл
+    void setPower(bool power) {
+        if (power) enable();
+        else disable();
     }
     
     // установить цвета r, g, b: 0-255
