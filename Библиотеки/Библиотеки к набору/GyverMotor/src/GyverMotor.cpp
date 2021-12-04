@@ -30,7 +30,7 @@ GMotor::GMotor(GM_driverType type, int8_t param1, int8_t param2, int8_t param3, 
 }
 
 void GMotor::setSpeed(int16_t duty) {
-    if (_mode < 2) {
+    if (_mode < 2) {    // FORWARD/BACKWARD/AUTO
         _duty = constrain(duty, -_maxDuty, _maxDuty);
         
         // фикс стандартного analogWrite(пин, 255) для >8 бит
@@ -57,7 +57,7 @@ void GMotor::run(GM_workMode mode, int16_t duty) {
         delayMicroseconds(_deadtime);
     }
 
-    // инверт (совместимость с есп)
+    // инверт
     if (_direction) {
         if (mode == FORWARD) mode = BACKWARD;
         else if (mode == BACKWARD) mode = FORWARD;
@@ -67,7 +67,7 @@ void GMotor::run(GM_workMode mode, int16_t duty) {
     case FORWARD:	setPins(_level, !_level, duty); _state = 1; break;		
     case BACKWARD:	setPins(!_level, _level, (_type == DRIVER2WIRE) ? (_maxDuty - duty) : (duty)); _state = -1; break;
     case BRAKE:		setPins(!_level, !_level, !_level * 255); _state = 0; break;	// при 0/255 analogWrite сделает 0/1
-    case STOP:		setPins(_level, _level, _level * 255); _state = 0; break;		
+    case STOP:		setPins(_level, _level, _level * 255); _duty = _dutyS = 0; _state = 0; break;
     }
 }
 

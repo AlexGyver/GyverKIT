@@ -50,7 +50,7 @@ const uint8_t* const emojis[] PROGMEM = {
 void setup() {
   mtrx.begin();       // запускаем
   mtrx.setBright(5);  // яркость 0..15
-  //mtrx.rotate(1);   // можно повернуть 0..3, по 90 град по часовой стрелке
+  //mtrx.setRotation(1);   // можно повернуть 0..3, по 90 град по часовой стрелке
 
   // рисуем одну любую emoji
   mtrx.drawBitmap(0, 0, winkleft_B, 8, 8);

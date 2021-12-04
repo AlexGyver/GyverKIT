@@ -32,6 +32,7 @@
 
 <a id="init"></a>
 ## Инициализация
+![scheme](https://github.com/GyverLibs/GyverNTC/blob/main/docs/conn.png)
 ```cpp
 // подключение: GND --- термистор --- A0 --- 10к --- 5V
 GyverNTC therm(0, 10000, 3435);	            // пин, сопротивление при 25 градусах (R термистора = R резистора!), бета-коэффициент

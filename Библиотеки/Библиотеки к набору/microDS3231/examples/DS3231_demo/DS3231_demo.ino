@@ -87,12 +87,12 @@ void loop() {
   Serial.println(rtc.getDateString());
 
   // вывод времени через char array
-  char time[8];
+  char time[9]; // буфер минимум на 9 символов (8 данные + 1 нулевой)
   rtc.getTimeChar(time);
   Serial.println(time);
   
   // вывод даты через char array
-  char date[10];
+  char date[11]; // буфер минимум на 11 символов (10 данные + 1 нулевой)
   rtc.getDateChar(date);
   Serial.println(date);
   

@@ -2,7 +2,7 @@
 ![author](https://img.shields.io/badge/author-AlexGyver-informational.svg)
 # GyverOLED
 Лёгкая и быстрая библиотека для OLED дисплея
-- Поддержка OLED дисплеев на SSD1306/SSH1106 с разрешением 128х64 и 128х32 с подключением по I2C
+- Поддержка OLED дисплеев на SSD1306/SSH1106 с разрешением 128х64 и 128х32 с подключением по I2C и SPI
 - Выбор буфера
     - Вообще без буфера (и без особой потери возможностей)
     - Буфер на стороне МК (тратит кучу оперативки, но удобнее в работе)
@@ -83,7 +83,7 @@ GyverOLED<SSD1306_128x64, OLED_BUFFER, OLED_SPI, CS, DS, RST> oled;
 void init();                    // инициализация
 void clear();                   // очистить дисплей
 void clear(int x0, int y0, int x1, int y1); // очистить область
-void setContrast(uint8_t value);    // яркость 0-15
+void setContrast(uint8_t value);    // яркость 0-255
 void setPower(bool mode);       // вкл/выкл
 void flipH(bool mode);          // отразить по горизонтали
 void invertDisplay(bool mode);  // инвертировать дисплей

@@ -1,7 +1,9 @@
 /*
     Многоосевой планировщик траекторий для шаговых моторов
     - ПЛАНИРОВАНИЕ СКОРОСТИ НА МАРШРУТЕ. НАСТРАИВАЕМЫЙ БУФЕР
-    - Макс. скорость: 37000 шаг/с на полной, 14000 шаг/с на разгоне
+    - Макс. скорость: 
+      - Обычный режим: 37000 шаг/с на полной, 14000 шаг/с на разгоне
+      - Быстрый профиль: 37000 шаг/с на полной, 37000 шаг/с на разгоне
     - Трапецеидальный профиль скорости (планировщик 2-го порядка)
     - Настройка скорости и ускорения
     - Любое количество осей. Будут двигаться синхронно к заданным целям
@@ -9,14 +11,11 @@
     - Режим постоянного вращения для одной оси (для движения к концевику например)
     - Тормоз/плавная остановка/пауза на траектории планировщика
     - Оптимизировано для работы по прерыванию таймера
-    - Быстрый контроль пинов шаговика для Arduino AVR    
+    - Быстрый контроль пинов шаговика для Arduino AVR
     
     AlexGyver, alex@alexgyver.ru
     https://alexgyver.ru/
     MIT License
-    
-    Версии:
-    v1.0
 */
 
 /*
@@ -75,6 +74,8 @@
     // обработчик буфера. Сам вызывается в tick. Нужно вызывать вручную при работе с tickManual
     // вернёт true, если планировщик отправил моторы на новую позицию (в этот момент можно запускать таймер)
     void checkBuffer();
+    
+    void clearBuffer();     // очистить буфер. Вызывать, когда планировщик остановлен!
 */
 
 #ifndef _GyverPlanner2_h
@@ -102,16 +103,26 @@ public:
 
     // ============================= PLANNER =============================    
     // установка максимальной скорости планировщика в шаг/сек
-    void setMaxSpeed(float nV) {
-        V = nV;
-        usMin = 1000000.0 / V;
+    void setMaxSpeed(float speed) {
+        nV = speed;
+        if (!status) {
+            V = nV;
+            usMin = 1000000.0 / V;
+            setAcceleration(na);
+            changeSett = 0;
+        } else changeSett = 1;
     }
     
     // установка ускорения планировщика в шаг/сек^2
-    void setAcceleration(uint16_t nA) {
-        a = nA;
-        if (a != 0) us0 = 0.676 * 1000000 * sqrt(2.0 / a);
-        else us0 = usMin;
+    void setAcceleration(uint16_t acc) {
+        na = acc;
+        if (!status) {
+            a = na;
+            if (a != 0) us0 = 0.676 * 1000000 * sqrt(2.0 / a);
+            else us0 = usMin;
+            changeSett = 0;
+            calcPlan();
+        } else changeSett = 1;
     }
     
     // установить dt смены скорости, 0.0.. 1.0 по умолч. 0.3
@@ -235,32 +246,55 @@ public:
 
         // https://www.embedded.com/generate-stepper-motor-speed-profiles-in-real-time/
         // здесь us10 - us*1024 для повышения разрешения микросекунд
-        if (step < s1) {                                    // разгон
-            us10 -= 2ul * us10 / (4ul * (step + so1) + 1);
-            us = (uint32_t)us10 >> 10;
-            us = constrain(us, usMin, us0);
+        if (a > 0) {
+            if (step < s1) {                                    // разгон
+                #ifndef GS_FAST_PROFILE
+                us10 -= 2ul * us10 / (4ul * (step + so1) + 1);
+                us = (uint32_t)us10 >> 10;
+                us = constrain(us, usMin, us0);
+                #else
+                if ((step + so1) >= prfS[GS_FAST_PROFILE - 1]) us = usMin;
+                else {
+                    int j = 0;
+                    while ((step + so1) >= prfS[j]) j++;
+                    us = prfP[j];
+                }
+                #endif
+            }
+            else if (step < s2) us = usMin;                     // постоянная
+            else if (step < S) {                                // торможение
+                #ifndef GS_FAST_PROFILE
+                us10 += 2ul * us10 / (4ul * (S - step + so2) + 1);
+                us = (uint32_t)us10 >> 10;
+                us = constrain(us, usMin, us0);
+                #else
+                if ((S - step + so2) >= prfS[GS_FAST_PROFILE - 1]) us = usMin;
+                else {
+                    int j = 0;
+                    while ((S - step + so2) >= prfS[j]) j++;
+                    us = prfP[j];
+                }
+                #endif
+            }
         }
-        else if (step < s2) us = usMin;                     // постоянная
-        else if (step < S) {                                // торможение
-            us10 += 2ul * us10 / (4ul * (S - step) + 1);
-            us = (uint32_t)us10 >> 10;
-            us = constrain(us, usMin, us0);
-        } else {                                            // приехали
+        if (step >= S) {                    // приехали
             if (status == 3) {              // достигли конечной точки
                 readyF = true;
                 status = 0;
             } else status = 1;              // иначе проверяем буфер
             next();
         }
-        return status > 1;
+        return (status > 1);
     }
     
     // обработчик буфера. Сам вызывается в tick. Нужно вызывать вручную при работе с tickManual
     bool checkBuffer() {
-        if (status == 1) {
-            if (bufV.available() > 1) {
-                if (bufV.get(0) == 0) calculateBlock();
-                if (setTarget()) return 1;                
+        if (status == 1) {      // достигли цели, запрашиваем новую
+            if (bufL.available() > 1) {
+                if (--block < 0) block = 0;
+                // в движении с ускорением пересчитываем путь, если остановились или есть на это время
+                if (a > 0 && (bufV.get(0) == 0 || (block == 0 && !changeSett && us > blockCalc))) calculateBlock();
+                if (setTarget()) return 1;
             }            
         }
         return 0;
@@ -270,8 +304,8 @@ public:
     bool ready() {
         if (readyF && !status) {
             readyF = false;
-            return true;
-        } return false;
+            return 1;
+        } return 0;
     }
     
     // true - в буфере планировщика есть место под новю точку
@@ -281,8 +315,8 @@ public:
     
     // добавить новую точку. Массив координат, флаг окончания и абсолютный/относительный
     void addTarget(int32_t tar[], uint8_t l, GS_posType type = ABSOLUTE) {
-        if (type = ABSOLUTE) for (int i = 0; i < _AXLES; i++) bufP[i].add(tar[i]);        
-        else for (int i = 0; i < _AXLES; i++) bufP[i].add(tar[i] + bufP[i].get(-1));
+        if (type == ABSOLUTE) for (int i = 0; i < _AXLES; i++) bufP[i].add(tar[i]);        
+        else for (int i = 0; i < _AXLES; i++) bufP[i].add(tar[i] + bufP[i].getLast());
         bufL.add(l);
         bufV.add(0);
         bufS.add(0);
@@ -293,65 +327,7 @@ public:
         for (int i = 0; i < _AXLES; i++) ntar[i] = (int32_t)tar[i];
         addTarget(ntar, l, type);
     }
-    
-    // пересчитать буфер. ~10ms на размер 32 и 2 оси
-    void calculateBlock() {
-        // поиск максимальной конечной скорости
-        for (int i = 0; i < bufV.available() - 1; i++) {
-            uint32_t sqSum = 0;
-            int32_t dn[_AXLES];            
-            for (int j = 0; j < _AXLES; j++) {
-                dn[j] = bufP[j].get(i + 1) - bufP[j].get(i);
-                sqSum += (int32_t)dn[j] * dn[j];
-            }
-            uint32_t s1 = sqrt(sqSum);
-            bufS.set(i, s1);
-            if (bufL.get(i + 1) == 1) break;
-            if (a == 0) {
-                bufV.set(i + 1, uint16_t(V));
-                continue;
-            }
-            if (s1 == 0) continue;
-
-            if (i < bufV.available() - 2) {
-                int32_t multSum = 0;
-                int32_t dn1[_AXLES];
-                sqSum = 0;
-                for (int j = 0; j < _AXLES; j++) {
-                    dn1[j] = bufP[j].get(i + 2) - bufP[j].get(i + 1);
-                    sqSum += (int32_t)dn1[j] * dn1[j];
-                    multSum += (int32_t)dn[j] * dn1[j];
-                }
-                uint32_t s2 = sqrt(sqSum);
-                if (s2 == 0) continue;
-                float cosa = -(float)multSum / s1 / s2;
-                float v2;
-                if (cosa < -0.95) v2 = V;
-                else v2 = (float)a * dtA / sqrt(2.0 * (1 + cosa));
-                v2 = min(v2, V);
-                bufV.set(i + 1, v2);
-            }
-        }
-
-        // рекурсивно уменьшаем конечные скорости на участке
-        for (int i = 0; i < bufV.available() - 1; i++) {
-            uint16_t v0 = bufV.get(i);
-            uint16_t v1 = bufV.get(i + 1);
-            uint16_t maxV = sqrt(2.0 * a * bufS.get(i) + v0 * v0);
-            if (v1 > v0 && maxV < v1) {
-                bufV.set(i + 1, maxV);
-            } else if (v1 < v0 && maxV > v1) {
-                int16_t count = 0;
-                while (1) {
-                    uint32_t minV = sqrt(2ul * a * bufS.get(i + count) + (uint32_t)bufV.get(i + count + 1) * bufV.get(i + count + 1));        
-                    if (minV >= bufV.get(i + count)) break;
-                    else bufV.set(i + count, minV);          
-                    count--;
-                }
-            }
-        }
-    }
-    
+        
     // время до следующего tick, мкс
     uint32_t getPeriod() {
         return us;
@@ -362,12 +338,84 @@ public:
         return status;
     }
     
+    // очистить буфер
+    void clearBuffer() {
+        for (int i = 0; i < _AXLES; i++) bufP[i].clear();
+        bufL.clear();
+        bufV.clear();
+        bufS.clear();
+    }
+    
     // ============================== PRIVATE ==============================
 private:
+    // пересчитать скорости
+    void calculateBlock() {
+        if (changeSett && bufV.get(0) == 0) {   // параметры движения изменились, а мы стоим
+            noInterrupts();
+            uint8_t stBuf = status;
+            status = 0;
+            setMaxSpeed(nV);
+            status = stBuf;
+            interrupts();
+            changeSett = 0;
+        }
+        
+        uint32_t calcTime = micros();
+        block = _BUF / 2;   // через половину буфера попробуем сделать перерасчёт пути
+        uint32_t nextS = calcS(0);
+        
+        // поиск максимальной конечной скорости
+        for (int i = 0; i < bufV.available() - 1; i++) {
+            int32_t dn0[_AXLES];
+            for (int j = 0; j < _AXLES; j++) dn0[j] = bufP[j].get(i + 1) - bufP[j].get(i);  // расстояние между точками (катеты)
+            uint32_t S1 = nextS;                                                            // "гипотенуза" (на 1 шаге посчитана выше)
+            bufS.set(i, S1);                                                                // записали в буфер
+            if (bufL.get(i + 1) == 1) break;                                                // последняя точка - выходим, потом посчитаем
+            if (S1 == 0) continue;                                                          // гипотенуза 0 - пропускаем
+
+            if (i < bufV.available() - 2) {                         // для следующих точек (+1)
+                int32_t multSum = 0;
+                // складываем перемноженные катеты для расчёта косинуса
+                for (int j = 0; j < _AXLES; j++) multSum += (int32_t)dn0[j] * (bufP[j].get(i + 2) - bufP[j].get(i + 1));
+                nextS = calcS(i + 1);                               // гипотенуза
+                if (nextS == 0) continue;                           // гипотенуза 0 - пропускаем
+                float cosa = -(float)multSum / S1 / nextS;          // косинус угла между отрезками пути
+                float Vm;                                           // макс. скорость в повороте
+                if (cosa < -0.95) Vm = V;                           // пролетаем по прямой
+                else {
+                    Vm = (float)a * dtA / sqrt(2.0 * (1 + cosa));   // считаем
+                    Vm = min(Vm, V);                                // на всякий случай ограничим
+                }
+                bufV.set(i + 1, Vm);                                // пишем в буфер
+            }
+        }
+
+        // уменьшаем переходные скорости на траектории
+        for (int i = 0; i < bufV.available() - 1; i++) {
+            uint32_t v0 = bufV.get(i);
+            uint32_t v1 = bufV.get(i + 1);
+            uint32_t maxV = sqrt(2L * a * bufS.get(i) + (uint32_t)v0 * v0);
+            if (v1 > v0 && maxV < v1) bufV.set(i + 1, maxV);    // всё в порядке
+            else if (v1 < v0 && maxV > v1) {                    // идём назад по буферу и уменьшаем скорости
+                int16_t count = 0;
+                while (true) {
+                    uint32_t minV = bufV.get(i + count + 1);
+                    minV *= (uint32_t)minV;
+                    minV = sqrt(2ul * a * bufS.get(i + count) + minV);        
+                    if (minV >= bufV.get(i + count)) break;
+                    else bufV.set(i + count, minV);                 
+                    count--;
+                }
+            }
+        }
+        // находим среднее время пересчёта, чтобы вызвать его между точками (когда появится возможность)
+        blockCalc = (blockCalc + micros() - calcTime) / 2;
+    }
+    
     void next() {
         for (int i = 0; i < _AXLES; i++) bufP[i].next();
         bufL.next();
-        bufV.next();
+        bufV.next(FIFO_WIPE);   // обнуляем использованную ячейку
         bufS.next();
     }
     
@@ -378,7 +426,10 @@ private:
             dS[i] = abs(bufP[i].get(1) - steppers[i]->pos);         // модуль ошибки по оси      
             steppers[i]->dir = steppers[i]->pos < bufP[i].get(1) ? 1 : -1;  // направление движения по оси
         }
-        S = bufS.get(0);
+        
+        if (a == 0) S = calcS(0);
+        else S = bufS.get(0);
+        
         if (S == 0) {       // путь == 0, мы никуда не едем
             status = 1;     // на буфер
             next();
@@ -388,10 +439,10 @@ private:
         for (int i = 0; i < _AXLES; i++) nd[i] = S / 2u;    // записываем половину
         
         if (a > 0) {
-            int16_t v1 = bufV.get(0);      // скорость начала отрезка
-            int16_t v2 = bufV.get(1);    
+            int32_t v1 = bufV.get(0);   // скорость начала отрезка
+            int32_t v2 = bufV.get(1);   // скорость конца отрезка
 
-            if (2L * V * V - v1 * v1 - v2 * v2 > 2L * a * S) {  // треугольник
+            if (2L * V * V - (int32_t)v1 * v1 - (int32_t)v2 * v2 > 2L * a * S) {  // треугольник
                 s1 = (2L * a * S + (int32_t)v2 * v2 - (int32_t)v1 * v1) / (4L * a);
                 s2 = 0;
             } else {          // трапеция
@@ -405,32 +456,69 @@ private:
                 else us = 1000000ul / v1;
             }
         } else {
-            so1 = so2 = 0;
             s1 = 0;
             s2 = S;
+            so1 = so2 = 0;
             us = usMin;
         }
-
+        
         step = 0;
         readyF = false;
         if (status != 4) {    // если это не стоп
             if (bufL.get(1) == 1) status = 3;
             else status = 2;
             us10 = us << 10;
-        }  
+        }
         return 1;
     }
+    
+    uint32_t calcS(int i) {
+        uint32_t sqSum = 0;
+        int32_t dj;
+        for (int j = 0; j < _AXLES; j++) {
+            dj = bufP[j].get(i + 1) - bufP[j].get(i);
+            sqSum += (int32_t)dj * dj;
+        }
+        return sqrt(sqSum);
+    }
+    
+    void calcPlan() {
+        #ifdef GS_FAST_PROFILE
+        if (a > 0) {
+            uint32_t sa = (uint32_t)V * V / a / 2ul;            // расстояние разгона
+            float dtf = sqrt(2.0 * sa / a) / GS_FAST_PROFILE;   // время участка профиля
+            float s0 = a * dtf * dtf / 2.0;                     // первый участок профиля
+            uint32_t dt = dtf * 1000000.0;                      // время участка в секундах
+            for (int i = 0; i < GS_FAST_PROFILE; i++) {
+                prfS[i] = s0 * (i + 1) * (i + 1);
+                uint32_t ds = prfS[i];
+                if (i > 0) ds -= prfS[i - 1];
+                if (ds <= 0) prfP[i] = 0;
+                else prfP[i] = (uint32_t)dt / ds;
+            }
+        }
+        #endif
+    }
+    
+    #ifdef GS_FAST_PROFILE
+    uint32_t prfS[GS_FAST_PROFILE], prfP[GS_FAST_PROFILE];
+    #endif
 
     uint32_t us;
     int32_t nd[_AXLES], dS[_AXLES];
     int32_t step, S, s1, s2, so1, so2;
     uint32_t tmr, us0, usMin, us10;
-    uint16_t a;
+    uint16_t a, na;
     int16_t stopStep;
-    float V;    
+    float V, nV;    
     uint8_t status = 0, speedAxis = 0, maxAx;
     bool readyF = true;
     float dtA = 0.3;
+    
+    int8_t block = 100;
+    uint32_t blockCalc = 20000;
+    bool changeSett = 0;
+    
     
     Stepper<_DRV>* steppers[_AXLES];    
     FIFO<int32_t, _BUF> bufP[_AXLES];

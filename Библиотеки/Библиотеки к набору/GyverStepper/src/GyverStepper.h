@@ -43,6 +43,14 @@
     v2.1 - добавил GyverStepper2, упрощённая и оптимизированная версия GyverStepper
     v2.1.1 - исправлена бага в GyverStepper
     v2.1.2 - совместимость Digispark
+    v2.1.3 - починил FOLLOW_POS в GStepper, починил RELATIVE в GPlanner2 и исправил багу с рывками
+    v2.1.4 - GPlanner2: исправил рывки, добавил адаптивное перестроение траектории без остановок, чутка оптимизировал вычисления
+    v2.1.5 - возможность менять скорость и ускорение во время работы планировщика (GStepper2, GPlanner, GPlanner2)
+    v2.1.6 - исправлена ошибка компиляции при вызове disable() в GStepper
+    v2.1.7 - добавлен clearBuffer() в GPlanner2
+    v2.1.8 - оптимизация, исправлен KEEP_SPEED в GStepper
+    v2.2.0 - добавлен скоростной профиль GS_FAST_PROFILE для GStepper2, GPlanner, GPlanner2. Поддержка режима "слежения" для GStepper2
+    v2.2.1 - небольшая оптимизация SRAM
 */
 
 /*
@@ -182,7 +190,6 @@ enum GS_runMode {
     KEEP_SPEED,
 };
 
-
 enum GS_smoothType {	
     NO_SMOOTH,
     SMOOTH,
@@ -194,8 +201,7 @@ class GStepper : public Stepper<_DRV, _TYPE> {
 public:	
     // конструктор
     GStepper(int stepsPerRev, uint8_t pin1 = 255, uint8_t pin2 = 255, uint8_t pin3 = 255, uint8_t pin4 = 255, uint8_t pin5 = 255) : 
-    _stepsPerDeg(stepsPerRev / 360.0) {
-        setPins(pin1, pin2, pin3, pin4, pin5);
+    _stepsPerDeg(stepsPerRev / 360.0), Stepper<_DRV, _TYPE> (pin1, pin2, pin3, pin4, pin5) {
         // умолчания
         setMaxSpeed(300);
         setAcceleration(300);
@@ -243,8 +249,8 @@ public:
     }
     
     // установка текущей позиции в градусах
-    void setCurrentDeg(float pos) {
-        setCurrent((float)pos * _stepsPerDeg);
+    void setCurrentDeg(float npos) {
+        setCurrent((float)npos * _stepsPerDeg);
     }
     
     // чтение текущей позиции в шагах
@@ -258,8 +264,8 @@ public:
     }
 
     // установка целевой позиции в шагах
-    void setTarget(long pos, GS_posType type = ABSOLUTE) {
-        _target = type ? (pos + pos) : pos;		
+    void setTarget(long npos, GS_posType type = ABSOLUTE) {
+        _target = type ? (npos + pos) : npos;
         if (_target != pos) {
             if (_accel == 0 || _maxSpeed < _MIN_SPEED_FP) {
                 stepTime = 1000000.0 / _maxSpeed;
@@ -270,8 +276,8 @@ public:
     }
     
     // установка целевой позиции в градусах
-    void setTargetDeg(float pos, GS_posType type = ABSOLUTE) {
-        setTarget((float)pos * _stepsPerDeg, type);
+    void setTargetDeg(float npos, GS_posType type = ABSOLUTE) {
+        setTarget((float)npos * _stepsPerDeg, type);
     }
     
     // получение целевой позиции в шагах
@@ -361,6 +367,7 @@ public:
         _speed = speed;
         if (abs(_speed) < _MIN_STEP_SPEED) _speed = _MIN_STEP_SPEED * _sign(_speed);
         enable();
+        dir = (_speed > 0) ? 1 : -1;
         if (_accel != 0) {							// плавный старт		
             if (_accelSpeed != _speed) {
                 _smoothStart = true;
@@ -382,8 +389,7 @@ public:
             }	
             _accelSpeed = _speed;
             stepTime = round(1000000.0 / abs(_speed));
-            dir = (_speed > 0) ? 1 : -1;
-        }        
+        }
     }
     
     // установка целевой скорости в градусах/секунду
@@ -426,7 +432,7 @@ public:
         _workState = false;
         _stopSpeed = 0;
         resetMotor();
-        if (_autoPower) disable();        
+        if (_autoPower) Stepper<_DRV, _TYPE>::disable();
     }
     
     // получить минимальный период, с которым нужно вызывать tick при заданной макс. скорости
@@ -442,14 +448,14 @@ public:
     // время между шагами
     uint32_t stepTime = 10000;
     
+    using Stepper<_DRV, _TYPE>::enable;
+    using Stepper<_DRV, _TYPE>::disable;
+    
     // ========================= PRIVATE ==========================
 private:
     using Stepper<_DRV, _TYPE>::pos;
     using Stepper<_DRV, _TYPE>::dir;
-    using Stepper<_DRV, _TYPE>::setPins;
     using Stepper<_DRV, _TYPE>::step;
-    using Stepper<_DRV, _TYPE>::enable;
-    using Stepper<_DRV, _TYPE>::disable;
     
     // сброс перемещения
     void resetMotor() {
@@ -516,7 +522,7 @@ private:
         if (tickUs - _plannerTime >= _plannerPrd) {
             _plannerTime += _plannerPrd;
             // ~110 us				
-            long err = _target - pos;											// "ошибка"
+            long err = _target - pos;											    // "ошибка"
             bool thisDir = ( _accelSpeed * _accelSpeed * _accelInv >= abs(err) );	// пора тормозить
             _accelSpeed += ( _accelTime * _plannerPrd * (thisDir ? -_sign(_accelSpeed) : _sign(err)) );	// разгон/торможение
             if (_stopSpeed == 0) _accelSpeed = constrain(_accelSpeed, -_maxSpeed, _maxSpeed);   // ограничение

@@ -29,10 +29,11 @@
     v2.5: добавлен тип DRIVER2WIRE_NO_INVERT
     v3.0: переделана логика minDuty, добавлен режим для ШИМ любой битности
     v3.1: мелкие исправления
+    v3.2: улучшена стабильность плавного режима
 */
 
-#ifndef GyverMotor_h
-#define GyverMotor_h
+#ifndef _GyverMotor_h
+#define _GyverMotor_h
 #include <Arduino.h>
 #define _SMOOTH_PRD 50		// таймер smoothTick, мс
 
@@ -64,7 +65,7 @@ public:
     // GMotor motor(DRIVER3WIRE, dig_pin_A, dig_pin_B, PWM_pin, (LOW/HIGH) )
     // GMotor motor(RELAY2WIRE, dig_pin_A, dig_pin_B, (LOW/HIGH) )
     
-    // установка скорости 0-255 (8 бит) и 0-1023 (10 бит)
+    // установка скорости -255..255 (8 бит) и -1023..1023 (10 бит)
     void setSpeed(int16_t duty);
     
     // сменить режим работы мотора:	

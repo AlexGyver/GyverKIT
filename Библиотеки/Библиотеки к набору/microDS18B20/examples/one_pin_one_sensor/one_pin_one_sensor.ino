@@ -2,39 +2,32 @@
 // один датчик - один пин
 
 #include <microDS18B20.h>
- // Датчики на D2 и D3
+// Датчики на D2 и D3
 MicroDS18B20<2> sensor1;
 MicroDS18B20<3> sensor2;
 
 void setup() {
   Serial.begin(9600);
-  //sensor1.setResolution(12);  // разрешение [9-12] бит. По умолч. 12 
 }
 
 void loop() {
-  // запрос температуры  
+  // запрос температуры
   sensor1.requestTemp();
   sensor2.requestTemp();
-  
-  // вместо delay используй таймер на millis()
-  delay(1000);  
-  
-  // вывод
-  Serial.print("t: ");
-  Serial.print(sensor1.getTemp());
-  Serial.print(", ");
-  Serial.println(sensor2.getTemp());
-}
 
-/*
-  Опрос датчиков асинхронный, т.е. не блокирует выполнение кода, но
-  между requestTemp и getTemp должно пройти не менее
+  // вместо delay используй таймер на millis(), пример async_read
+  delay(1000);
+
+  // ПЕРВЫЙ ДАТЧИК
+  Serial.print("t1: ");
   
-  точность | время
-  12 бит   | 750 мс
-  11 бит   | 375 мс
-  10 бит   | 187 мс
-  9 бит    | 93 мс
+  // просто выводим температуру первого датчика
+  Serial.print(sensor1.getTemp());
+
+  // ВТОРОЙ ДАТЧИК
+  Serial.print(", t2: ");
   
-  Иначе датчик вернёт предыдущее значение
-*/
+  // проверяем успешность чтения и выводим
+  if (sensor2.readTemp()) Serial.println(sensor2.getTemp());
+  else Serial.println("error");
+}

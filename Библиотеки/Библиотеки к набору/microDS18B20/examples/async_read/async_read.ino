@@ -16,7 +16,8 @@ void loop() {
     tmr = millis();
 
     // читаем прошлое значение
-    Serial.println(sensor.getTemp());
+    if (sensor.readTemp()) Serial.println(sensor.getTemp());
+    else Serial.println("error");
 
     // запрашиваем новое измерение
     sensor.requestTemp();
