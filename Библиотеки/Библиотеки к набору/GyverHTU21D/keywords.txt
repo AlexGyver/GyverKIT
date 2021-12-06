@@ -1,0 +1,37 @@
+#######################################
+# Syntax Coloring Map For GyverHTU21D
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+GyverHTU21D	KEYWORD1 
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+begin	KEYWORD2
+setResolution	KEYWORD2
+setHeater	KEYWORD2
+powerGood	KEYWORD2
+
+readTick	KEYWORD2
+
+requestTemperature	KEYWORD2
+requestHumidity	KEYWORD2
+
+readTemperature	KEYWORD2
+readHumidity	KEYWORD2
+
+getTemperature	KEYWORD2
+getHumidity	KEYWORD2
+
+getTemperatureWait	KEYWORD2
+getHumidityWait	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+HTU21D_RES_HIGH	LITERAL1 
+HTU21D_RES_MEDIUM	LITERAL1
+HTU21D_RES_LOW	LITERAL1
