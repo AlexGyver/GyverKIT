@@ -1,0 +1,4 @@
+# methods
+SimpleKeypad	KEYWORD2
+getKey	KEYWORD2
+scan	KEYWORD2
