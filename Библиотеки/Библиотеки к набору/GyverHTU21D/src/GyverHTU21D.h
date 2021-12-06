@@ -43,6 +43,7 @@ public:
     // запуск и проверка наличия датчика
     bool begin(void) {
         Wire.begin();
+        bufH = bufT = 300;  // сброс
         return request(HTU21D_RESET_CMD);
     }
     
@@ -120,8 +121,7 @@ public:
         if (millis() - tmr >= prd) {
             tmr = millis();
             if (mode) {
-                if (mode != 2) readTemperature();   // пропуск первого вызова
-                else mode = 0;
+                readTemperature();
                 requestHumidity();
             } else {
                 readHumidity();
@@ -136,7 +136,7 @@ public:
 private:
     float bufH = 300, bufT = 300;
     uint32_t tmr = 0;
-    uint8_t mode = 2;
+    uint8_t mode = 0;
     
     uint16_t readValue() {
         Wire.requestFrom(HTU21D_IIC_ADDR, 3);
