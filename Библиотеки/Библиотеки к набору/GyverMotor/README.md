@@ -40,10 +40,10 @@
 ## Инициализация
 ```cpp
 // варианты инициализации в зависимости от типа драйвера:
-GMotor motor(DRIVER2WIRE, dig_pin, PWM_pin, (LOW / HIGH) )
-GMotor motor(DRIVER2WIRE_NO_INVERT, dig_pin, PWM_pin, (LOW / HIGH) )
-GMotor motor(DRIVER3WIRE, dig_pin_A, dig_pin_B, PWM_pin, (LOW/HIGH) )
-GMotor motor(RELAY2WIRE, dig_pin_A, dig_pin_B, (LOW/HIGH) )
+GMotor motor(DRIVER2WIRE, dig_pin, PWM_pin, (LOW / HIGH) );
+GMotor motor(DRIVER2WIRE_NO_INVERT, dig_pin, PWM_pin, (LOW / HIGH) );
+GMotor motor(DRIVER3WIRE, dig_pin_A, dig_pin_B, PWM_pin, (LOW/HIGH) );
+GMotor motor(RELAY2WIRE, dig_pin_A, dig_pin_B, (LOW/HIGH) );
 /*
   DRIVER2WIRE - двухпроводной драйвер (направление + ШИМ)
   DRIVER2WIRE_NO_INVERT - двухпроводной драйвер, в котором при смене направления не нужна инверсия ШИМ
@@ -59,30 +59,58 @@ GMotor motor(RELAY2WIRE, dig_pin_A, dig_pin_B, (LOW/HIGH) )
 <a id="usage"></a>
 ## Использование
 ```cpp
-// сменить режим работы мотора:  
-// AUTO - для прямого управления скоростью и плавного режима
+GMotor(GM_driverType type, int8_t param1 = _GM_NC, int8_t param2 = _GM_NC, int8_t param3 = _GM_NC, int8_t param4 = _GM_NC);
+// три варианта создания объекта в зависимости от драйвера:
+// GMotor motor(DRIVER2WIRE, dig_pin, PWM_pin, (LOW/HIGH) )
+// GMotor motor(DRIVER3WIRE, dig_pin_A, dig_pin_B, PWM_pin, (LOW/HIGH) )
+// GMotor motor(RELAY2WIRE, dig_pin_A, dig_pin_B, (LOW/HIGH) )
+
+// установка скорости -255..255 (8 бит) и -1023..1023 (10 бит)
+void setSpeed(int16_t duty);
+
+// сменить режим работы мотора:	
 // FORWARD - вперёд
 // BACKWARD - назад
 // STOP - остановить
-// BRAKE - тормоз
-void setMode(workMode mode);
+// BRAKE - активный тормоз
+// AUTO - подчиняется setSpeed (-255.. 255)
+void setMode(GM_workMode mode);
 
-// направление вращения  
-// NORMAL - обычное
+// направление вращения	
+// NORM - обычное
 // REVERSE - обратное
+void setDirection(bool direction);
 
-void setDirection(dir direction);           // установить глобальное направление вращения мотора
-void setResolution(byte bit);               // установить разрешение ШИМ в битах (по умолч 8)
-void setDeadtime(uint16_t deadtime);        // установить deadtime (в микросекундах). По умолч 0
-void setLevel(int8_t level);                // установить уровень драйвера (по умолч. HIGH)
+// установить минимальную скважность (при которой мотор начинает крутиться)
+void setMinDuty(int duty);
 
-void run(workMode mode, int16_t duty);      // дать прямую команду мотору (без смены режима)
-void setSpeed(int16_t duty);                // установка скорости -255..255 (8 бит) и -1023..1023 (10 бит)
+// установить разрешение ШИМ в битах
+void setResolution(byte bit);
 
-void setSmoothSpeed(uint8_t speed);         // скорость изменения скорости
-void smoothTick(int16_t duty);              // плавное изменение к указанной скорости
+// установить deadtime (в микросекундах). По умолч 0
+void setDeadtime(uint16_t deadtime);	
 
-int16_t _duty = 0;                          // внутренняя переменная скважности для отладки
+// установить уровень драйвера (по умолч. HIGH)
+void setLevel(int8_t level);			
+
+// плавное изменение к указанной скорости (к значению ШИМ)
+void smoothTick(int16_t duty);
+
+// скорость изменения скорости
+void setSmoothSpeed(uint8_t speed);	
+
+// возвращает -1 при вращении BACKWARD, 1 при FORWARD и 0 при остановке и торможении
+int getState();
+
+// внутренняя переменная скважности для отладки
+int16_t _duty = 0;
+
+// свовместимость со старыми версиями
+// установить выход в 8 бит
+void set8bitMode();		
+
+// установить выход в 10 бит
+void set10bitMode();
 ```
 
 ### Логика работы
@@ -183,6 +211,7 @@ void loop() {
 - v3.0: переделана логика minDuty, добавлен режим для ШИМ любой битности
 - v3.1: мелкие исправления
 - v3.2: улучшена стабильность плавного режима
+- v3.2.1: вернул run() в public
 
 <a id="feedback"></a>
 ## Баги и обратная связь

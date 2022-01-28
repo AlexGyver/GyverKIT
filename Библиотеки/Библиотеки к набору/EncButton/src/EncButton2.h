@@ -1,49 +1,5 @@
-/*
-    Ультра лёгкая и быстрая библиотека для энкодера, энкодера с кнопкой или просто кнопки
-    Документация:
-    GitHub: https://github.com/GyverLibs/EncButton
-    Возможности:
-    - Максимально быстрое чтение пинов для AVR (ATmega328/ATmega168, ATtiny85/ATtiny13)
-    - Оптимизированный вес
-    - Быстрые и лёгкие алгоритмы кнопки и энкодера
-    - Энкодер: поворот, нажатый поворот, быстрый поворот, счётчик
-    - Кнопка: антидребезг, клик, несколько кликов, счётчик кликов, удержание, режим step
-    - Подключение - только HIGH PULL!
-    - Опциональный режим callback (+22б SRAM на каждый экземпляр)
-    
-    AlexGyver, alex@alexgyver.ru
-    https://alexgyver.ru/
-    MIT License
-    Опционально используется алгоритм из библиотеки // https://github.com/mathertel/RotaryEncoder
-
-    Версии:
-    v1.1 - пуллап отдельныи методом
-    v1.2 - можно передать конструктору параметр INPUT_PULLUP / INPUT(умолч)
-    v1.3 - виртуальное зажатие кнопки энкодера вынесено в отдельную функцию + мелкие улучшения
-    v1.4 - обработка нажатия и отпускания кнопки
-    v1.5 - добавлен виртуальный режим
-    v1.6 - оптимизация работы в прерывании
-    v1.6.1 - PULLUP по умолчанию
-    v1.7 - большая оптимизация памяти, переделан FastIO
-    v1.8 - индивидуальная настройка таймаута удержания кнопки (была общая на всех)
-    v1.8.1 - убран FastIO
-    v1.9 - добавлена отдельная отработка нажатого поворота и запрос направления
-    v1.10 - улучшил обработку released, облегчил вес в режиме callback и исправил баги
-    v1.11 - ещё больше всякой оптимизации + настройка уровня кнопки
-    v1.11.1 - совместимость Digispark
-    v1.12 - добавил более точный алгоритм энкодера EB_BETTER_ENC
-    v1.13 - добавлен экспериментальный EncButton2
-    v1.14 - добавлена releaseStep(). Отпускание кнопки внесено в дебаунс
-    v1.15 - добавлен setPins() для EncButton2
-    v1.16 - добавлен режим EB_HALFSTEP_ENC для полушаговых энкодеров
-    v1.17 - добавлен step с предварительными кликами
-    v1.18 - не считаем клики после активации step. held() и hold() тоже могут принимать предварительные клики. Переделан и улучшен дебаунс
-    v1.18.1 - исправлена ошибка в releaseStep() (не возвращала результат)
-    v1.18.2 - fix compiler warnings
-*/
-
-#ifndef _EncButton_h
-#define _EncButton_h
+#ifndef _EncButton2_h
+#define _EncButton2_h
 
 // ========= НАСТРОЙКИ (можно передефайнить из скетча) ==========
 #define _EB_FAST 30         // таймаут быстрого поворота
@@ -98,16 +54,6 @@ enum eb_callback {
     // clicks amount 13
 };
 
-// константы
-#define EB_TICK 0
-#define EB_CALLBACK 1
-
-#define EB_NO_PIN 255
-
-#define VIRT_ENC 254
-#define VIRT_ENCBTN 253
-#define VIRT_BTN 252
-
 #ifdef EB_BETTER_ENC
 static const int8_t _EB_DIR[] = {
   0, -1,  1,  0,
@@ -117,30 +63,51 @@ static const int8_t _EB_DIR[] = {
 };
 #endif
 
+// константы
+#define EB_TICK 0
+#define EB_CALLBACK 1
+
+#define EB_BTN 1
+#define EB_ENCBTN 2
+#define EB_ENC 3
+#define VIRT_BTN 4
+#define VIRT_ENCBTN 5
+#define VIRT_ENC 6
+
+#define EB_PIN_AM (_EB_TYPE <= 3 ? _EB_TYPE : 0)
+
 // ===================================== CLASS =====================================
-template < uint8_t _EB_MODE, uint8_t _S1 = EB_NO_PIN, uint8_t _S2 = EB_NO_PIN, uint8_t _KEY = EB_NO_PIN >
-class EncButton {
+template < uint8_t _EB_TYPE, uint8_t _EB_MODE = EB_TICK >
+class EncButton2 {
 public:
-    // можно указать режим работы пина
-    EncButton(const uint8_t mode = INPUT_PULLUP) {
-        if (_S1 < 252 && mode == INPUT_PULLUP) pullUp();
+    // pinMode, pin1, pin2, pin3
+    EncButton2(uint8_t mode = INPUT, uint8_t P1 = 255, uint8_t P2 = 255, uint8_t P3 = 255) {
         setButtonLevel(LOW);
+        setPins(mode, P1, P2, P3);
+    }
+    
+    // установить пины
+    void setPins(uint8_t mode, uint8_t P1 = 255, uint8_t P2 = 255, uint8_t P3 = 255) {
+        if (_EB_TYPE == EB_BTN) {
+            pinMode(P1, mode);
+            _pins[0] = P1;
+        } else if (_EB_TYPE == EB_ENC) {
+            pinMode(P1, mode);
+            pinMode(P2, mode);
+            _pins[0] = P1;
+            _pins[1] = P2;
+        } else if (_EB_TYPE == EB_ENCBTN) {
+            pinMode(P1, mode);
+            pinMode(P2, mode);
+            pinMode(P3, mode);
+            _pins[0] = P1;
+            _pins[1] = P2;
+            _pins[2] = P3;
+        }
     }
     
     // подтянуть пины внутренней подтяжкой
     void pullUp() {
-        if (_S1 < 252) {                        // реальное устройство
-            if (_S2 == EB_NO_PIN) {             // обычная кнопка
-                pinMode(_S1, INPUT_PULLUP);
-            } else if (_KEY == EB_NO_PIN) {     // энк без кнопки
-                pinMode(_S1, INPUT_PULLUP);
-                pinMode(_S2, INPUT_PULLUP);
-            } else {                            // энк с кнопкой
-                pinMode(_S1, INPUT_PULLUP);
-                pinMode(_S2, INPUT_PULLUP);
-                pinMode(_KEY, INPUT_PULLUP);
-            }
-        }
     }
     
     // установить таймаут удержания кнопки для isHold(), мс (до 30 000)
@@ -169,29 +136,34 @@ public:
         return EBState;
     }
     
+#define EB_BTN 1
+#define EB_ENCBTN 2
+#define EB_ENC 3
+#define VIRT_BTN 4
+#define VIRT_ENCBTN 5
+#define VIRT_ENC 6
+    
     // тикер специально для прерывания, не проверяет коллбэки
-    uint8_t tickISR(uint8_t s1 = 0, uint8_t s2 = 0, uint8_t key = 0) {
+    uint8_t tickISR(uint8_t p0 = 0, uint8_t p1 = 0, uint8_t p2 = 0) {
         if (!_isrFlag) {
             _isrFlag = 1;
             
-            // обработка энка (компилятор вырежет блок если не используется)
-            // если объявлены два пина или выбран вирт. энкодер или энкодер с кнопкой
-            if ((_S1 < 252 && _S2 < 252) || _S1 == VIRT_ENC || _S1 == VIRT_ENCBTN) {
-                uint8_t state;
-                if (_S1 >= 252) state = s1 | (s2 << 1);             // получаем код
-                else state = fastRead(_S1) | (fastRead(_S2) << 1);  // получаем код
-                poolEnc(state);
-            }
-
-            // обработка кнопки (компилятор вырежет блок если не используется)
-            // если S2 не указан (кнопка) или указан KEY или выбран вирт. энкодер с кнопкой или кнопка
-            if ((_S1 < 252 && _S2 == EB_NO_PIN) || _KEY != EB_NO_PIN || _S1 == VIRT_BTN || _S1 == VIRT_ENCBTN) {
-                if (_S1 < 252 && _S2 == EB_NO_PIN) _btnState = fastRead(_S1);   // обычная кнопка
-                if (_KEY != EB_NO_PIN) _btnState = fastRead(_KEY);              // энк с кнопкой
-                if (_S1 == VIRT_BTN) _btnState = s1;                            // вирт кнопка
-                if (_S1 == VIRT_ENCBTN) _btnState = key;                        // вирт энк с кнопкой
-                _btnState ^= _EB_readFlag(11);                                  // инверсия кнопки
-                poolBtn();           
+            if (_EB_TYPE <= 3) {                                                // РЕАЛЬНОЕ УСТРОЙСТВО
+                if (_EB_TYPE >= 2) poolEnc(fastRead(0) | (fastRead(1) << 1));   // энк или энк с кнопкой
+                if (_EB_TYPE <= 2) {                                            // кнопка или энк с кнопкой
+                    if (_EB_TYPE == EB_BTN) _btnState = fastRead(0);            // кнопка
+                    else _btnState = fastRead(2);                               // энк с кнопкой
+                    _btnState ^= _EB_readFlag(11);                              // инверсия кнопки
+                    poolBtn(); 
+                }
+            } else {                                                            // ВИРТУАЛЬНОЕ УСТРОЙСТВО
+                if (_EB_TYPE >= 5) poolEnc(p0 | (p1 << 1));                     // энк или энк с кнопкой
+                if (_EB_TYPE <= 5) {                                            // кнопка или энк с кнопкой
+                    if (_EB_TYPE == VIRT_BTN) _btnState = p0;                   // кнопка
+                    else _btnState = p2;                                        // энк с кнопкой
+                    _btnState ^= _EB_readFlag(11);                              // инверсия кнопки
+                    poolBtn(); 
+                }
             }
         }
         _isrFlag = 0;
@@ -249,7 +221,6 @@ public:
     bool fast() { return _EB_readFlag(1); }     // быстрый поворот
     bool turn() { return checkFlag(0); }        // энкодер повёрнут
     bool turnH() { return checkFlag(9); }       // энкодер повёрнут нажато
-    
     int8_t getDir() { return _dir; }            // направление последнего поворота, 1 или -1
     int16_t counter = 0;                        // счётчик энкодера
     
@@ -267,7 +238,7 @@ public:
     bool held(uint8_t clk) { return (clicks == clk) ? checkState(6) : 0; }          // кнопка удержана с предварительным накликиванием
     bool hold(uint8_t clk) { return (clicks == clk) ? _EB_readFlag(4) : 0; }        // кнопка удерживается с предварительным накликиванием
     bool step(uint8_t clk) { return (clicks == clk) ? checkState(7) : 0; }          // режим импульсного удержания с предварительным накликиванием
-    bool releaseStep(uint8_t clk) { return (clicks == clk) ? checkFlag(12) : 0; }   // кнопка отпущена после импульсного удержания с предварительным накликиванием
+    bool releaseStep(uint8_t clk = 0) { return (clicks == clk) ? checkFlag(12) : 0; }   // кнопка отпущена после импульсного удержания с предварительным накликиванием
     
     uint8_t clicks = 0;                         // счётчик кликов
     bool hasClicks(uint8_t num) { return (clicks == num && checkFlag(7)) ? 1 : 0; }     // имеются клики
@@ -291,20 +262,7 @@ public:
     bool isRight() { return right(); }
     
     // ===================================== PRIVATE =====================================
-private:
-    bool fastRead(const uint8_t pin) {
-#if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__)
-        if (pin < 8) return bitRead(PIND, pin);
-        else if (pin < 14) return bitRead(PINB, pin - 8);
-        else if (pin < 20) return bitRead(PINC, pin - 14);
-#elif defined(__AVR_ATtiny85__) || defined(__AVR_ATtiny13__)
-        return bitRead(PINB, pin);
-#else
-        return digitalRead(pin);
-#endif
-        return 0;
-    }
-    
+private:  
     // ===================================== POOL ENC =====================================
     void poolEnc(uint8_t state) {
     #ifdef EB_BETTER_ENC
@@ -319,7 +277,7 @@ private:
             #endif
                 EBState = (_ecount < 0) ? 1 : 2;
                 _ecount = 0;
-                if (_S2 == EB_NO_PIN || _KEY != EB_NO_PIN) {            // энкодер с кнопкой
+                if (_EB_TYPE == EB_ENCBTN || _EB_TYPE == VIRT_ENCBTN) { // энкодер с кнопкой
                     if (!_EB_readFlag(4) && (_btnState || _EB_readFlag(8))) EBState += 2;   // если кнопка не "удерживается"
                 }
                 _dir = (EBState & 1) ? -1 : 1;                          // направление
@@ -333,7 +291,7 @@ private:
         }
     #else
         if (_encRST && state == 0b11) {                                 // ресет и энк защёлкнул позицию
-            if (_S2 == EB_NO_PIN || _KEY != EB_NO_PIN) {                // энкодер с кнопкой
+            if (_EB_TYPE == EB_ENCBTN || _EB_TYPE == VIRT_ENCBTN) {     // энкодер с кнопкой
                 if ((_prev == 1 || _prev == 2) && !_EB_readFlag(4)) {   // если кнопка не "удерживается" и энкодер в позиции 1 или 2
                     EBState = _prev;
                     if (_btnState || _EB_readFlag(8)) EBState += 2;
@@ -417,6 +375,10 @@ private:
     }
     
     // ===================================== MISC =====================================
+    bool fastRead(uint8_t pin) {
+        return digitalRead(_pins[pin]);
+    }
+    
     bool checkState(uint8_t val) {
         if (EBState == val) {
             EBState = 0;
@@ -449,6 +411,8 @@ private:
     int8_t _dir = 0;
     void (*_callback[_EB_MODE ? 14 : 0])() = {};
     uint8_t _amount = 0;
+    
+    uint8_t _pins[EB_PIN_AM];
 
     // flags
     // 0 - enc turn
@@ -478,5 +442,4 @@ private:
     // 7 - step
     // 8 - press
 };
-
 #endif

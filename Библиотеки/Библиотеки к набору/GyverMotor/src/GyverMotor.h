@@ -30,6 +30,7 @@
     v3.0: переделана логика minDuty, добавлен режим для ШИМ любой битности
     v3.1: мелкие исправления
     v3.2: улучшена стабильность плавного режима
+    v3.2.1: вернул run() в public
 */
 
 #ifndef _GyverMotor_h
@@ -81,6 +82,9 @@ public:
     // REVERSE - обратное
     void setDirection(bool direction);
     
+    // дать прямую команду мотору (без смены режима)
+    void run(GM_workMode mode, int16_t duty = 0);
+    
     // установить минимальную скважность (при которой мотор начинает крутиться)
     void setMinDuty(int duty);
     
@@ -113,8 +117,7 @@ public:
     void set10bitMode();
     
 protected:
-    void setPins(bool a, bool b, int c);	
-    void run(GM_workMode mode, int16_t duty = 0);		// дать прямую команду мотору (без смены режима)
+    void setPins(bool a, bool b, int c);
     int16_t _dutyS = 0;
     int _minDuty = 0, _state = 0;;
     int8_t _digA = _GM_NC, _digB = _GM_NC, _pwmC = _GM_NC;

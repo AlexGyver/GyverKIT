@@ -21,6 +21,7 @@
     v1.4 - переделан FastIO
     v1.4.1 - убран FastIO, CRC вынесен отдельно
     v2.0 - убран буфер на отправку, убран манчестер, полностью переделан и оптимизирован интерфейс связи
+    v2.0.1 - fix compiler warnings
 */
 
 #ifndef _Gyver433_h
@@ -53,7 +54,7 @@
 #define G433_EDGE_S (G433_START + G433_WINDOW)
 
 // жоский delay для avr
-#ifdef AVR
+#ifdef _delay_us
 #define G433_DELAY(x) _delay_us(x)
 #else
 #define G433_DELAY(x) delayMicroseconds(x)
@@ -85,7 +86,7 @@ public:
     
     // отправка, блокирующая. Кушает любой тип данных
     template <typename T>
-    bool sendData(T &data) {
+    void sendData(T &data) {
         uint8_t *ptr = (uint8_t*) &data;
         write(ptr, sizeof(T));
     }
